@@ -1,9 +1,14 @@
-import { pgTable, serial, varchar, timestamp, numeric, text } from "drizzle-orm/pg-core";
+import { pgTable, serial, varchar, timestamp, numeric, text, integer, real } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
     userId: serial("user_id").primaryKey(),
     username: varchar("username", { length: 255 }).notNull().unique(),
     walletKey: varchar("wallet_key", { length: 255 }).notNull().unique(),
+    pfp: varchar("pfp", { length: 500 }),
+    wins: integer("wins").notNull().default(0),
+    losses: integer("losses").notNull().default(0),
+    totalWon: real("total_won").notNull().default(0),
+    totalLost: real("total_lost").notNull().default(0),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

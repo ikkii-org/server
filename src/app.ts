@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { duelRoutes } from "./routes/duel.routes";
 import { healthRoutes } from "./routes/health.routes";
+import { userRoutes } from "./routes/user.routes";
 
 const app = new Hono();
 
@@ -11,6 +12,7 @@ app.use("*", cors());
 
 app.route("/health", healthRoutes);
 app.route("/duels", duelRoutes);
+app.route("/users", userRoutes);
 
 app.notFound((c) => {
     return c.json({ error: "Not found" }, 404);
