@@ -2,12 +2,12 @@ import { DuelStatus } from "../types/duel.types"
 
 export interface Duel {
     id: string
-    player1: string
-    player2: string
+    player1Username: string
+    player2Username: string | null
     stakeAmount: number
     tokenMint: string
     status: DuelStatus
-    winner?: string
+    winnerUsername?: string
     player1SubmittedWinner?: string
     player2SubmittedWinner?: string
     expiresAt: Date
