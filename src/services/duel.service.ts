@@ -1,162 +1,243 @@
-import { Duel } from "../models/duel.model";
-import { randomUUID } from "crypto";
+import { db } from "../db";
+import { duels, users } from "../db/schema";
+import { eq, and, lt } from "drizzle-orm";
+import type { DuelStatus } from "../types/duel.types";
+import { recordWin, recordLoss } from "./user.service";
 
-// In-memory store for MVP (replace with database later)
-const duels = new Map<string, Duel>();
+// Infer the row type directly from the schema
+type DuelRow = typeof duels.$inferSelect;
 
+// ─── Public response shape ───────────────────────────────────────────────────
+
+export interface Duel {
+    id: string;
+    player1Id: string;
+    player1Username: string;
+    player2Id: string | null;
+    player2Username: string | null;
+    stakeAmount: number;
+    tokenMint: string;
+    status: DuelStatus;
+    winnerUsername: string | null;
+    winnerId: string | null;
+    player1SubmittedWinner: string | null;
+    player2SubmittedWinner: string | null;
+    gameId: string | null;
+    expiresAt: Date;
+    createdAt: Date;
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function mapRow(row: DuelRow): Duel {
+    return {
+        id: row.id,
+        player1Id: row.player1Id,
+        player1Username: row.player1Username,
+        player2Id: row.player2Id ?? null,
+        player2Username: row.player2Username ?? null,
+        stakeAmount: row.stakeAmount,
+        tokenMint: row.tokenMint,
+        status: row.status as DuelStatus,
+        winnerUsername: row.winnerUsername ?? null,
+        winnerId: row.winnerId ?? null,
+        player1SubmittedWinner: row.player1SubmittedWinner ?? null,
+        player2SubmittedWinner: row.player2SubmittedWinner ?? null,
+        gameId: row.gameId ?? null,
+        expiresAt: row.expiresAt,
+        createdAt: row.createdAt,
+    };
+}
+
+async function requireUser(username: string) {
+    const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.username, username));
+
+    if (!user) throw new Error(`User '${username}' not found`);
+    return user;
+}
+
+// ─── Service functions ────────────────────────────────────────────────────────
+
+/**
+ * Create a new open duel.
+ * @param player1Username - username of the creator
+ * @param stakeAmount     - amount to stake
+ * @param tokenMint       - SPL token mint address
+ * @param gameId          - optional game UUID to associate
+ * @param expiresInMs     - milliseconds until the duel expires (default 30 min)
+ */
 export async function createDuel(
     player1Username: string,
     stakeAmount: number,
     tokenMint: string,
-    expiresInMs: number = 30 * 60 * 1000 // 30 min default
+    gameId?: string,
+    expiresInMs: number = 30 * 60 * 1000
 ): Promise<Duel> {
-    if (!player1Username) {
-        throw new Error("Player username is required");
-    }
-    if (stakeAmount <= 0) {
-        throw new Error("Stake amount must be greater than 0");
-    }
-    if (!tokenMint) {
-        throw new Error("Token mint is required");
-    }
+    if (!player1Username) throw new Error("Player username is required");
+    if (stakeAmount <= 0) throw new Error("Stake amount must be greater than 0");
+    if (!tokenMint) throw new Error("Token mint is required");
 
-    const duel: Duel = {
-        id: randomUUID(),
-        player1Username,
-        player2Username: null,
-        stakeAmount,
-        tokenMint,
-        status: "OPEN",
-        expiresAt: new Date(Date.now() + expiresInMs),
-        createdAt: new Date(),
-    };
+    const player1 = await requireUser(player1Username);
 
-    duels.set(duel.id, duel);
+    const [duel] = await db
+        .insert(duels)
+        .values({
+            player1Id: player1.id,
+            player1Username: player1.username,
+            player2Id: null,
+            player2Username: null,
+            stakeAmount,
+            tokenMint,
+            status: "OPEN",
+            gameId: gameId ?? null,
+            expiresAt: new Date(Date.now() + expiresInMs),
+        })
+        .returning();
 
-    // TODO: Call escrow service to lock player1's stake on-chain
-
-    return duel;
+    return mapRow(duel);
 }
 
-
+/**
+ * Join an existing open duel as player 2.
+ */
 export async function joinDuel(duelId: string, player2Username: string): Promise<Duel> {
-    const duel = duels.get(duelId);
-    if (!duel) {
-        throw new Error("Duel not found");
-    }
-    if (duel.status !== "OPEN") {
-        throw new Error("Duel is not open for joining");
-    }
-    if (duel.player1Username === player2Username) {
-        throw new Error("Player cannot join their own duel");
-    }
-    if (duel.expiresAt < new Date()) {
-        throw new Error("Duel has expired");
-    }
+    const [duel] = await db.select().from(duels).where(eq(duels.id, duelId));
+    if (!duel) throw new Error("Duel not found");
+    if (duel.status !== "OPEN") throw new Error("Duel is not open for joining");
+    if (duel.player1Username === player2Username) throw new Error("Player cannot join their own duel");
+    if (duel.expiresAt < new Date()) throw new Error("Duel has expired");
 
-    duel.player2Username = player2Username;
-    duel.status = "ACTIVE";
-    duels.set(duel.id, duel);
-    return duel;
+    const player2 = await requireUser(player2Username);
+
+    const [updated] = await db
+        .update(duels)
+        .set({
+            player2Id: player2.id,
+            player2Username: player2.username,
+            status: "ACTIVE",
+        })
+        .where(eq(duels.id, duelId))
+        .returning();
+
+    return mapRow(updated);
 }
 
-
+/**
+ * Submit a result claim. Once both players agree the duel is SETTLED;
+ * if they disagree it becomes DISPUTED.
+ */
 export async function submitResult(
     duelId: string,
     username: string,
     claimedWinnerUsername: string
 ): Promise<{ duel: Duel; resolved: boolean }> {
-    const duel = duels.get(duelId);
-    if (!duel) {
-        throw new Error("Duel not found");
-    }
-    if (duel.status !== "ACTIVE") {
-        throw new Error("Duel is not active");
-    }
+    const [duel] = await db.select().from(duels).where(eq(duels.id, duelId));
+    if (!duel) throw new Error("Duel not found");
+    if (duel.status !== "ACTIVE") throw new Error("Duel is not active");
     if (username !== duel.player1Username && username !== duel.player2Username) {
         throw new Error("Only participants can submit results");
     }
-    if (claimedWinnerUsername !== duel.player1Username && claimedWinnerUsername !== duel.player2Username) {
+    if (
+        claimedWinnerUsername !== duel.player1Username &&
+        claimedWinnerUsername !== duel.player2Username
+    ) {
         throw new Error("Winner must be one of the duel participants");
     }
 
+    const update: Partial<typeof duels.$inferInsert> = {};
+
     if (username === duel.player1Username) {
-        if (duel.player1SubmittedWinner) {
-            throw new Error("Player 1 has already submitted a result");
-        }
-        duel.player1SubmittedWinner = claimedWinnerUsername;
+        if (duel.player1SubmittedWinner) throw new Error("Player 1 has already submitted a result");
+        update.player1SubmittedWinner = claimedWinnerUsername;
     } else {
-        if (duel.player2SubmittedWinner) {
-            throw new Error("Player 2 has already submitted a result");
-        }
-        duel.player2SubmittedWinner = claimedWinnerUsername;
+        if (duel.player2SubmittedWinner) throw new Error("Player 2 has already submitted a result");
+        update.player2SubmittedWinner = claimedWinnerUsername;
     }
 
-    duels.set(duel.id, duel);
+    const [updated] = await db
+        .update(duels)
+        .set(update)
+        .where(eq(duels.id, duelId))
+        .returning();
 
-    if (duel.player1SubmittedWinner && duel.player2SubmittedWinner) {
-        if (duel.player1SubmittedWinner === duel.player2SubmittedWinner) {
-            duel.winnerUsername = duel.player1SubmittedWinner;
-            duel.status = "SETTLED";
-            duels.set(duel.id, duel);
-            // TODO: Call escrow service to pay out winner
-            return { duel, resolved: true };
+    // Both players submitted — resolve
+    if (updated.player1SubmittedWinner && updated.player2SubmittedWinner) {
+        if (updated.player1SubmittedWinner === updated.player2SubmittedWinner) {
+            // Consensus → settle
+            const winnerUsername = updated.player1SubmittedWinner;
+            const winner = await requireUser(winnerUsername);
+            const loserUsername =
+                winnerUsername === updated.player1Username
+                    ? updated.player2Username!
+                    : updated.player1Username;
+            const loser = await requireUser(loserUsername);
+
+            const [settled] = await db
+                .update(duels)
+                .set({ winnerUsername, winnerId: winner.id, status: "SETTLED" })
+                .where(eq(duels.id, duelId))
+                .returning();
+
+            // Update win/loss stats
+            await recordWin(winner.id, updated.stakeAmount);
+            await recordLoss(loser.id, updated.stakeAmount);
+
+            return { duel: mapRow(settled), resolved: true };
         } else {
-            duel.status = "DISPUTED";
-            duels.set(duel.id, duel);
-            // TODO: Trigger verification.service to check via game API
-            return { duel, resolved: false };
+            // Dispute
+            const [disputed] = await db
+                .update(duels)
+                .set({ status: "DISPUTED" })
+                .where(eq(duels.id, duelId))
+                .returning();
+
+            return { duel: mapRow(disputed), resolved: false };
         }
     }
 
-    // Waiting for other player's submission
-    return { duel, resolved: false };
+    return { duel: mapRow(updated), resolved: false };
 }
 
-
+/**
+ * Cancel an open duel (only by creator, only if player 2 hasn't joined).
+ */
 export async function cancelDuel(duelId: string, username: string): Promise<Duel> {
-    const duel = duels.get(duelId);
-    if (!duel) {
-        throw new Error("Duel not found");
-    }
-    if (duel.status !== "OPEN") {
-        throw new Error("Only open duels can be cancelled");
-    }
-    if (username !== duel.player1Username) {
-        throw new Error("Only the creator can cancel the duel");
-    }
-    if (duel.player2Username === null) {
-        duel.status = "CANCELLED";
-        duels.set(duel.id, duel);
-        return duel;
-    }
-    throw new Error("Cannot cancel duel after another player has joined");
+    const [duel] = await db.select().from(duels).where(eq(duels.id, duelId));
+    if (!duel) throw new Error("Duel not found");
+    if (duel.status !== "OPEN") throw new Error("Only open duels can be cancelled");
+    if (username !== duel.player1Username) throw new Error("Only the creator can cancel the duel");
+    if (duel.player2Username !== null) throw new Error("Cannot cancel duel after another player has joined");
+
+    const [cancelled] = await db
+        .update(duels)
+        .set({ status: "CANCELLED" })
+        .where(eq(duels.id, duelId))
+        .returning();
+
+    return mapRow(cancelled);
 }
 
-
-export async function cleanUpExpiredDuels(): Promise<number> {
-    const now = new Date();
-    let count = 0;
-    for (const duel of duels.values()) {
-        if (duel.status === "OPEN" && duel.expiresAt < now) {
-            duel.status = "CANCELLED";
-            duels.set(duel.id, duel);
-            count++;
-        }
-    }
-    return count;
-}
-
-
+/**
+ * Get a single duel by ID.
+ */
 export async function getDuel(duelId: string): Promise<Duel> {
-    const duel = duels.get(duelId);
-    if (!duel) {
-        throw new Error("Duel not found");
-    }
-    return duel;
+    const [duel] = await db.select().from(duels).where(eq(duels.id, duelId));
+    if (!duel) throw new Error("Duel not found");
+    return mapRow(duel);
 }
 
-// Helper for testing/debugging
-export function getDuelStore(): Map<string, Duel> {
-    return duels;
+/**
+ * Cancel all OPEN duels that have passed their expiresAt timestamp.
+ * Returns the number of rows affected.
+ */
+export async function cleanUpExpiredDuels(): Promise<number> {
+    const result = await db
+        .update(duels)
+        .set({ status: "CANCELLED" })
+        .where(and(eq(duels.status, "OPEN"), lt(duels.expiresAt, new Date())));
+
+    return result.rowCount ?? 0;
 }
