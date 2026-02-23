@@ -4,6 +4,7 @@ import {
   uuid,
   timestamp,
   boolean,
+  real,
 } from "drizzle-orm/pg-core";
 import { users } from "./user.schema";
 import { duelStatusEnum } from "./enums";
@@ -21,23 +22,27 @@ export const games = pgTable("games", {
 export const duels = pgTable("duels", {
   id: uuid("id").primaryKey().defaultRandom(),
   status: duelStatusEnum("status").notNull().default("OPEN"),
+  player1Username: varchar("player1_username", { length: 255 }).notNull(),
+  player2Username: varchar("player2_username", { length: 255 }),
   player1Id: uuid("player1_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  player2Id: uuid("player2_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
+  player2Id: uuid("player2_id").references(() => users.id, {
+    onDelete: "cascade",
+  }),
+  winnerUsername: varchar("winner_username", { length: 255 }),
   winnerId: uuid("winner_id").references(() => users.id, {
     onDelete: "cascade",
   }),
   player1SubmittedWinner: varchar("player1_submitted_winner", { length: 255 }),
   player2SubmittedWinner: varchar("player2_submitted_winner", { length: 255 }),
+  stakeAmount: real("stake_amount").notNull(),
+  tokenMint: varchar("token_mint", { length: 255 }).notNull(),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  gameId: uuid("game_id")
-    .notNull()
-    .references(() => games.id, { onDelete: "cascade" })
-    .unique(),
+  gameId: uuid("game_id").references(() => games.id, {
+    onDelete: "cascade",
+  }),
 });
 
 export const duelParticipants = pgTable("duel_participants", {

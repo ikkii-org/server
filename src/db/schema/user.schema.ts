@@ -14,6 +14,7 @@ export const users = pgTable("users", {
   wins: integer("wins").notNull().default(0),
   losses: integer("losses").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  passwordHash: varchar("password_hash", { length: 255 }),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
