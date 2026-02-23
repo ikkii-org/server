@@ -23,4 +23,4 @@ jobs:
         run: bun install
 
       - name: Generate DB client
-        run: bun run db:generate
+        run: bun run drizzle-kit generate
