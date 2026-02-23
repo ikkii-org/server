@@ -1,10 +1,8 @@
 import { users } from "./user.schema";
 import { duels } from "./games.schema";
-import {
-  transactionStatusEnum,
-  transactionTypeEnum,
-} from "../types/transactions.type";
+
 import { uuid, pgTable } from "drizzle-orm/pg-core";
+import { transactionStatusEnum, transactionTypeEnum } from "./enums";
 
 export const transactions = pgTable("transactions", {
   id: uuid("id").primaryKey().defaultRandom(),

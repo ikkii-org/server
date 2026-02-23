@@ -6,7 +6,7 @@ import {
   boolean,
 } from "drizzle-orm/pg-core";
 import { users } from "./user.schema";
-import { duelStatusEnum } from "../types/duel.types";
+import { duelStatusEnum } from "./enums";
 export const games = pgTable("games", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id")
