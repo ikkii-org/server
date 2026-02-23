@@ -3,6 +3,7 @@ import {
     createPlayer,
     getPlayerProfile,
     updatePlayerPfp,
+    getPlayerById,
 } from "../services/user.service";
 
 export async function createPlayerHandler(c: Context) {
@@ -26,6 +27,17 @@ export async function getProfileHandler(c: Context) {
         const username = c.req.param("username");
         const profile = await getPlayerProfile(username);
         return c.json({ profile }, 200);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Player not found";
+        return c.json({ error: message }, 404);
+    }
+}
+
+export async function getPlayerByIdHandler(c: Context) {
+    try {
+        const userId = c.req.param("id");
+        const player = await getPlayerById(userId);
+        return c.json({ player }, 200);
     } catch (error) {
         const message = error instanceof Error ? error.message : "Player not found";
         return c.json({ error: message }, 404);

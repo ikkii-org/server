@@ -5,17 +5,18 @@ import {
     submitResult,
     cancelDuel,
     getDuel,
+    cleanUpExpiredDuels,
 } from "../services/duel.service";
 
 export async function createDuelHandler(c: Context) {
     try {
-        const { username, stakeAmount, tokenMint } = await c.req.json();
+        const { username, stakeAmount, tokenMint, gameId, expiresInMs } = await c.req.json();
 
         if (!username || !stakeAmount || !tokenMint) {
             return c.json({ error: "Missing required fields: username, stakeAmount, tokenMint" }, 400);
         }
 
-        const duel = await createDuel(username, stakeAmount, tokenMint);
+        const duel = await createDuel(username, stakeAmount, tokenMint, gameId, expiresInMs);
         return c.json({ duel }, 201);
     } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to create duel";
@@ -82,5 +83,15 @@ export async function getDuelHandler(c: Context) {
     } catch (error) {
         const message = error instanceof Error ? error.message : "Duel not found";
         return c.json({ error: message }, 404);
+    }
+}
+
+export async function cleanUpExpiredDuelsHandler(c: Context) {
+    try {
+        const count = await cleanUpExpiredDuels();
+        return c.json({ cancelledCount: count }, 200);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to clean up duels";
+        return c.json({ error: message }, 500);
     }
 }
