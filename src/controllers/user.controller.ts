@@ -1,5 +1,6 @@
 import { Context } from "hono";
 import { getPlayerProfile, getPlayerById, updatePlayerPfp } from "../services/user.service";
+import { updatePfpSchema } from "../validators/user.validators";
 
 export async function getProfileHandler(c: Context) {
     try {
@@ -26,11 +27,14 @@ export async function getPlayerByIdHandler(c: Context) {
 export async function updatePfpHandler(c: Context) {
     try {
         const username = c.req.param("username");
-        const { pfp } = await c.req.json();
+        const body = await c.req.json();
+        const result = updatePfpSchema.safeParse(body);
 
-        if (!pfp) return c.json({ error: "Missing required field: pfp" }, 400);
+        if (!result.success) {
+            return c.json({ error: result.error.issues[0].message }, 400);
+        }
 
-        const player = await updatePlayerPfp(username, pfp);
+        const player = await updatePlayerPfp(username, result.data.pfp);
         return c.json({ player }, 200);
     } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to update pfp";
