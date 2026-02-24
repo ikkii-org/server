@@ -14,7 +14,11 @@ export const usernameSchema = z
     .max(20, "Username must be at most 20 characters")
     .regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores");
 
-// Create duel validation
+// Duel ID: UUID format
+export const duelIdSchema = z
+    .string()
+    .uuid("Invalid duel ID format");
+
 export const createDuelSchema = z.object({
     username: usernameSchema,
     stakeAmount: z.number().positive("Stake amount must be positive"),
@@ -23,18 +27,15 @@ export const createDuelSchema = z.object({
     expiresInMs: z.number().positive().optional(),
 });
 
-// Join duel validation
 export const joinDuelSchema = z.object({
     username: usernameSchema,
 });
 
-// Submit result validation
 export const submitResultSchema = z.object({
     username: usernameSchema,
     winnerUsername: usernameSchema,
 });
 
-// Cancel duel validation
 export const cancelDuelSchema = z.object({
     username: usernameSchema,
 });
