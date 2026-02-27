@@ -24,6 +24,7 @@ const app = new Hono()
     }
     // Or just report errors which are not instances of HTTPException
     // Sentry.captureException(err);
+    console.error("Unhandled error:", err);
     return c.json({ error: "Internal server error" }, 500);
   })
   .use((c: Context, next: Next) => {
