@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Context, Hono, Next } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { useSession } from "@hono/session";
@@ -15,16 +15,27 @@ import { leaderboardRoutes } from "./routes/leaderboard.routes";
 import { verificationRoutes } from "./routes/verification.routes";
 import { HTTPException } from "hono/http-exception";
 
-const app = new Hono().onError((err, c) => {
-  // Report _all_ unhandled errors.
-  Sentry.captureException(err);
-  if (err instanceof HTTPException) {
-    return err.getResponse();
-  }
-  // Or just report errors which are not instances of HTTPException
-  // Sentry.captureException(err);
-  return c.json({ error: "Internal server error" }, 500);
-});
+const app = new Hono()
+  .onError((err, c) => {
+    // Report _all_ unhandled errors.
+    Sentry.captureException(err);
+    if (err instanceof HTTPException) {
+      return err.getResponse();
+    }
+    // Or just report errors which are not instances of HTTPException
+    // Sentry.captureException(err);
+    return c.json({ error: "Internal server error" }, 500);
+  })
+  .use((c: Context, next: Next) => {
+    // Only set user context if session exists and has user data
+    if (c.get("session")) {
+      Sentry.setUser({
+        username: c.get("session").username,
+      });
+    }
+
+    return next();
+  });
 
 // ─── Global middlewares ───────────────────────────────────────────────────────
 app.use("*", logger());
@@ -33,8 +44,8 @@ app.use(
   "*",
   useSession({
     secret: env.COOKIE_SECRET,
-    duration: { absolute: 60 * 60 * 24 * 7 }, // 7 days in seconds
-  })
+    duration: { absolute: 60 * 60 * 24 }, // 24 hours in seconds
+  }),
 );
 
 // ─── Public routes (no auth) ──────────────────────────────────────────────────
@@ -53,7 +64,9 @@ app.route("/duels", duelRoutes);
 app.route("/escrow", escrowRoutes);
 app.route("/leaderboard", leaderboardRoutes);
 app.route("/verification", verificationRoutes);
-
+app.get("/debug-sentry", () => {
+  throw new Error("My first Sentry error!");
+});
 // ─── Error handlers ───────────────────────────────────────────────────────────
 app.notFound((c) => {
   return c.json({ error: "Not found" }, 404);
