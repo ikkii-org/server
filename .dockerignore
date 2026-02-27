@@ -1,0 +1,15 @@
+node_modules
+dist
+build
+.git
+.gitignore
+*.md
+.env
+.env.*
+drizzle
+*.log
+.DS_Store
+Thumbs.db
+coverage
+.vscode
+.idea
