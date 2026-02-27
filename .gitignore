@@ -6,6 +6,10 @@ dist/
 build/
 drizzle/
 
+
+#99 plugin output files
+tmp
+
 # Environment variables
 .env
 .env.local
