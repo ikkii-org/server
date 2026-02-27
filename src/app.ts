@@ -1,10 +1,11 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
+import { useSession } from "@hono/session";
+import { env } from "./config/env";
 
-import { env } from "./config/env"; // validates JWT_SECRET + DATABASE_URL at startup
 import { authMiddleware } from "./middleware/auth.middleware";
-
+import * as Sentry from "@sentry/node";
 import { healthRoutes } from "./routes/health.routes";
 import { authRoutes } from "./routes/auth.routes";
 import { userRoutes } from "./routes/user.routes";
@@ -12,12 +13,29 @@ import { duelRoutes } from "./routes/duel.routes";
 import { escrowRoutes } from "./routes/escrow.routes";
 import { leaderboardRoutes } from "./routes/leaderboard.routes";
 import { verificationRoutes } from "./routes/verification.routes";
+import { HTTPException } from "hono/http-exception";
 
-const app = new Hono();
+const app = new Hono().onError((err, c) => {
+  // Report _all_ unhandled errors.
+  Sentry.captureException(err);
+  if (err instanceof HTTPException) {
+    return err.getResponse();
+  }
+  // Or just report errors which are not instances of HTTPException
+  // Sentry.captureException(err);
+  return c.json({ error: "Internal server error" }, 500);
+});
 
 // ─── Global middlewares ───────────────────────────────────────────────────────
 app.use("*", logger());
 app.use("*", cors());
+app.use(
+  "*",
+  useSession({
+    secret: env.COOKIE_SECRET,
+    duration: { absolute: 60 * 60 * 24 * 7 }, // 7 days in seconds
+  })
+);
 
 // ─── Public routes (no auth) ──────────────────────────────────────────────────
 app.route("/health", healthRoutes);
@@ -38,12 +56,12 @@ app.route("/verification", verificationRoutes);
 
 // ─── Error handlers ───────────────────────────────────────────────────────────
 app.notFound((c) => {
-    return c.json({ error: "Not found" }, 404);
+  return c.json({ error: "Not found" }, 404);
 });
 
 app.onError((err, c) => {
-    console.error("Unhandled error:", err);
-    return c.json({ error: "Internal server error" }, 500);
+  console.error("Unhandled error:", err);
+  return c.json({ error: "Internal server error" }, 500);
 });
 
 export default app;
