@@ -5,6 +5,7 @@ import {
   timestamp,
   boolean,
   real,
+  index,
 } from "drizzle-orm/pg-core";
 import { users } from "./user.schema";
 import { duelStatusEnum } from "./enums";
@@ -17,6 +18,10 @@ export const games = pgTable("games", {
   ingame_username: varchar("ingame_username", { length: 255 })
     .notNull()
     .unique(),
+}, (table) => {
+  return {
+    userIdIdx: index("games_user_id_idx").on(table.userId),
+  };
 });
 
 export const duels = pgTable("duels", {
@@ -43,6 +48,15 @@ export const duels = pgTable("duels", {
   gameId: uuid("game_id").references(() => games.id, {
     onDelete: "cascade",
   }),
+}, (table) => {
+  return {
+    statusIdx: index("duels_status_idx").on(table.status),
+    player1IdIdx: index("duels_player1_id_idx").on(table.player1Id),
+    player2IdIdx: index("duels_player2_id_idx").on(table.player2Id),
+    winnerIdIdx: index("duels_winner_id_idx").on(table.winnerId),
+    expiresAtIdx: index("duels_expires_at_idx").on(table.expiresAt),
+    createdAtIdx: index("duels_created_at_idx").on(table.createdAt),
+  };
 });
 
 export const duelParticipants = pgTable("duel_participants", {
@@ -53,6 +67,12 @@ export const duelParticipants = pgTable("duel_participants", {
   userId: uuid("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+}, (table) => {
+  return {
+    duelIdIdx: index("duel_participants_duel_id_idx").on(table.duelId),
+    userIdIdx: index("duel_participants_user_id_idx").on(table.userId),
+    duelUserIdx: index("duel_participants_duel_user_idx").on(table.duelId, table.userId),
+  };
 });
 
 export const matches = pgTable("matches", {
@@ -65,6 +85,12 @@ export const matches = pgTable("matches", {
     .unique(),
   mvp: boolean("mvp").notNull().default(false),
   won: boolean("won").notNull().default(false),
+}, (table) => {
+  return {
+    gameprofileIdIdx: index("matches_game_profile_id_idx").on(table.gameprofileId),
+    wonIdx: index("matches_won_idx").on(table.won),
+    mvpIdx: index("matches_mvp_idx").on(table.mvp),
+  };
 });
 
 export const gameProfiles = pgTable("game_profiles", {
@@ -77,6 +103,12 @@ export const gameProfiles = pgTable("game_profiles", {
     .references(() => games.id, { onDelete: "cascade" }),
   playerId: varchar("player_id").unique(),
   rank: varchar("rank"),
+}, (table) => {
+  return {
+    userIdIdx: index("game_profiles_user_id_idx").on(table.userId),
+    gameIdIdx: index("game_profiles_game_id_idx").on(table.gameId),
+    userGameIdx: index("game_profiles_user_game_idx").on(table.userId, table.gameId),
+  };
 });
 
 export type gameProfile = typeof gameProfiles.$inferSelect;

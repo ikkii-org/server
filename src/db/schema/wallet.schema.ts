@@ -1,4 +1,4 @@
-import { decimal, numeric, pgTable, uuid, varchar } from "drizzle-orm/pg-core";
+import { decimal, numeric, pgTable, uuid, varchar, index } from "drizzle-orm/pg-core";
 import { users } from "./user.schema";
 
 export const wallet = pgTable("wallet", {
@@ -18,6 +18,10 @@ export const wallet = pgTable("wallet", {
   lockedBalance: numeric("locked_balance", { precision: 20, scale: 6 })
     .notNull()
     .default("0"),
+}, (table) => {
+  return {
+    tokenIdx: index("wallet_token_idx").on(table.token),
+  };
 });
 
 export type Wallet = typeof wallet.$inferSelect;

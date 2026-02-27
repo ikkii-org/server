@@ -5,6 +5,7 @@ import {
   integer,
   real,
   uuid,
+  index,
 } from "drizzle-orm/pg-core";
 export const users = pgTable("users", {
   id: uuid("user_id").defaultRandom().primaryKey(),
@@ -16,6 +17,10 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   passwordHash: varchar("password_hash", { length: 255 }),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => {
+  return {
+    createdAtIdx: index("users_created_at_idx").on(table.createdAt),
+  };
 });
 
 export const portfolio = pgTable("portfolio", {
@@ -23,7 +28,7 @@ export const portfolio = pgTable("portfolio", {
   userId: uuid("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" })
-    .unique(), // ensures 1:1
+    .unique(),
   solanaBalance: real("solana_balance").notNull().default(0),
   currentRank: integer("current_rank").notNull().default(0),
   previousRank: integer("previous_rank").notNull().default(0),
@@ -31,6 +36,11 @@ export const portfolio = pgTable("portfolio", {
   totalStakeLost: real("total_lost").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => {
+  return {
+    userIdIdx: index("portfolio_user_id_idx").on(table.userId),
+    currentRankIdx: index("portfolio_current_rank_idx").on(table.currentRank),
+  };
 });
 
 export type User = typeof users.$inferSelect;
