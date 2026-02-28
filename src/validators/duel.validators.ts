@@ -1,18 +1,8 @@
 import { z } from "zod";
+import { usernameSchema, solanaAddressSchema } from "./user.validators";
 
-// Solana public key is base58 encoded, 32-44 characters
-const solanaAddressSchema = z
-    .string()
-    .min(32)
-    .max(44)
-    .regex(/^[1-9A-HJ-NP-Za-km-z]+$/, "Invalid Solana address");
-
-// Username: alphanumeric, underscores, 3-20 chars
-export const usernameSchema = z
-    .string()
-    .min(3, "Username must be at least 3 characters")
-    .max(20, "Username must be at most 20 characters")
-    .regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores");
+// Re-export for use in controllers
+export { usernameSchema };
 
 // Duel ID: UUID format
 export const duelIdSchema = z

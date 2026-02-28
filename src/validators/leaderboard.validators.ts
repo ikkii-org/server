@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { usernameSchema } from "./duel.validators";
+import { usernameSchema } from "./user.validators";
 
 // Re-export for use in controllers
 export { usernameSchema };

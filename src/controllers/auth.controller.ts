@@ -1,22 +1,22 @@
 import { Context } from "hono";
 import { signup, login } from "../services/auth.service";
+import { signupSchema, loginSchema } from "../validators/auth.validators";
 
 export async function signupHandler(c: Context) {
   try {
-    const { username, walletKey, password, pfp } = await c.req.json();
+    const body = await c.req.json();
+    const result = signupSchema.safeParse(body);
 
-    if (!username || !walletKey || !password) {
-      return c.json(
-        { error: "Missing required fields: username, walletKey, password" },
-        400,
-      );
+    if (!result.success) {
+      return c.json({ error: result.error.issues[0].message }, 400);
     }
 
-    const result = await signup(username, walletKey, password, pfp);
+    const { username, walletKey, password, pfp } = result.data;
+    const signupResult = await signup(username, walletKey, password, pfp);
 
-    await c.var.session.update({ userId: result.user.id, username: result.user.username });
+    await c.var.session.update({ userId: signupResult.user.id, username: signupResult.user.username });
 
-    return c.json(result, 201);
+    return c.json(signupResult, 201);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Signup failed";
     return c.json({ error: message }, 400);
@@ -25,20 +25,19 @@ export async function signupHandler(c: Context) {
 
 export async function loginHandler(c: Context) {
   try {
-    const { username, password } = await c.req.json();
+    const body = await c.req.json();
+    const result = loginSchema.safeParse(body);
 
-    if (!username || !password) {
-      return c.json(
-        { error: "Missing required fields: username, password" },
-        400,
-      );
+    if (!result.success) {
+      return c.json({ error: result.error.issues[0].message }, 400);
     }
 
-    const result = await login(username, password);
+    const { username, password } = result.data;
+    const loginResult = await login(username, password);
 
-    await c.var.session.update({ userId: result.user.id, username: result.user.username });
+    await c.var.session.update({ userId: loginResult.user.id, username: loginResult.user.username });
 
-    return c.json(result, 200);
+    return c.json(loginResult, 200);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Login failed";
     return c.json({ error: message }, 401);
