@@ -27,11 +27,12 @@ const app = new Hono()
     console.error("Unhandled error:", err);
     return c.json({ error: "Internal server error" }, 500);
   })
-  .use((c: Context, next: Next) => {
+  .use(async (c: Context, next: Next) => {
     // Only set user context if session exists and has user data
-    if (c.get("session")) {
+    const sessionData = await c.var.session?.get();
+    if (sessionData?.username) {
       Sentry.setUser({
-        username: c.get("session").username,
+        username: sessionData.username,
       });
     }
 

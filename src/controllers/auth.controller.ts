@@ -14,8 +14,7 @@ export async function signupHandler(c: Context) {
 
     const result = await signup(username, walletKey, password, pfp);
 
-    const session = c.get("session");
-    session.set({ userId: result.user.id, username: result.user.username });
+    await c.var.session.update({ userId: result.user.id, username: result.user.username });
 
     return c.json(result, 201);
   } catch (error) {
@@ -37,8 +36,7 @@ export async function loginHandler(c: Context) {
 
     const result = await login(username, password);
 
-    const session = c.get("session");
-    session.set({ userId: result.user.id, username: result.user.username });
+    await c.var.session.update({ userId: result.user.id, username: result.user.username });
 
     return c.json(result, 200);
   } catch (error) {
@@ -48,7 +46,6 @@ export async function loginHandler(c: Context) {
 }
 
 export async function logoutHandler(c: Context) {
-  const session = c.get("session");
-  session.delete();
+  c.var.session.delete();
   return c.json({ message: "Logged out" }, 200);
 }

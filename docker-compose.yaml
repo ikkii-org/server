@@ -5,9 +5,8 @@ services:
       target: dev
     ports:
       - "3000:3000"
-    environment:
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/ikki
-      - PORT=3000
+    env_file:
+      - .env
     volumes:
       - .:/app
       - /app/node_modules
@@ -18,7 +17,7 @@ services:
   db:
     image: postgres:16-alpine
     ports:
-      - "5432:5432"
+      - "5433:5432"
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
@@ -33,3 +32,6 @@ services:
 
 volumes:
   postgres_data:
+
+
+  
