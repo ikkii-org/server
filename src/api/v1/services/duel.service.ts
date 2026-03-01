@@ -1,30 +1,13 @@
-import { db } from "../db";
-import { duels, users } from "../db/schema";
+import { db } from "../../../db";
+import { duels, users } from "../../../db/schema";
 import { eq, and, lt, sql } from "drizzle-orm";
 import type { DuelStatus } from "../types/duel.types";
+import type { Duel, DuelSubmitResult } from "../models/duel.model";
+
+export type { Duel, DuelSubmitResult };
 
 // Infer the row type directly from the schema
 type DuelRow = typeof duels.$inferSelect;
-
-// ─── Public response shape ───────────────────────────────────────────────────
-
-export interface Duel {
-    id: string;
-    player1Id: string;
-    player1Username: string;
-    player2Id: string | null;
-    player2Username: string | null;
-    stakeAmount: number;
-    tokenMint: string;
-    status: DuelStatus;
-    winnerUsername: string | null;
-    winnerId: string | null;
-    player1SubmittedWinner: string | null;
-    player2SubmittedWinner: string | null;
-    gameId: string | null;
-    expiresAt: Date;
-    createdAt: Date;
-}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -132,7 +115,7 @@ export async function submitResult(
     duelId: string,
     username: string,
     claimedWinnerUsername: string
-): Promise<{ duel: Duel; resolved: boolean }> {
+): Promise<DuelSubmitResult> {
     const [duel] = await db.select().from(duels).where(eq(duels.id, duelId));
     if (!duel) throw new Error("Duel not found");
     if (duel.status !== "ACTIVE") throw new Error("Duel is not active");

@@ -1,10 +1,13 @@
 import { hash, verify } from "@node-rs/argon2";
 import { sign } from "hono/jwt";
 import { eq } from "drizzle-orm";
-import { db } from "../db";
-import { users, portfolio, wallet } from "../db/schema";
-import { env } from "../config/env";
-import type { User } from "../db/schema";
+import { db } from "../../../db";
+import { users, portfolio, wallet } from "../../../db/schema";
+import { env } from "../../../config/env";
+import type { User } from "../../../db/schema";
+import type { AuthResult } from "../models/auth.model";
+
+export type { AuthResult };
 
 // ─── JWT ─────────────────────────────────────────────────────────────────────
 
@@ -37,12 +40,6 @@ export async function signToken(
 }
 
 // ─── Signup ───────────────────────────────────────────────────────────────────
-
-export interface AuthResult {
-  token: string;
-  user: Omit<User, "passwordHash">;
-}
-
 export async function signup(
   username: string,
   walletKey: string,

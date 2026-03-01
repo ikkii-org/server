@@ -8,7 +8,7 @@ import {
     unlockFundsHandler,
     transferStakeHandler,
 } from "../controllers/escrow.controller";
-import { adminMiddleware } from "../middleware/admin.middleware";
+import { adminMiddleware } from "../../../middleware/admin.middleware";
 
 export const escrowRoutes = new Hono();
 

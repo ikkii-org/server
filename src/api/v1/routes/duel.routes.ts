@@ -7,7 +7,7 @@ import {
     getDuelHandler,
     cleanUpExpiredDuelsHandler,
 } from "../controllers/duel.controller";
-import { adminMiddleware } from "../middleware/admin.middleware";
+import { adminMiddleware } from "../../../middleware/admin.middleware";
 
 export const duelRoutes = new Hono();
 

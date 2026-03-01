@@ -1,16 +1,10 @@
-import { db } from "../db";
-import { duels, gameProfiles, matches } from "../db/schema";
+import { db } from "../../../db";
+import { duels, gameProfiles, matches } from "../../../db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { recordWin, recordLoss } from "./user.service";
+import type { VerificationResult } from "../models/verification.model";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-export interface VerificationResult {
-    duelId: string;
-    verified: boolean;
-    winnerUsername: string | null;
-    reason: string;
-}
+export type { VerificationResult };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

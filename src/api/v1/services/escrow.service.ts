@@ -1,7 +1,7 @@
-import { db } from "../db";
-import { wallet } from "../db/schema";
+import { db } from "../../../db";
+import { wallet } from "../../../db/schema";
 import { eq, sql } from "drizzle-orm";
-import type { Wallet } from "../db/schema";
+import type { Wallet } from "../../../db/schema";
 
 // ─── Wallet CRUD ──────────────────────────────────────────────────────────────
 

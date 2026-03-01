@@ -1,8 +1,8 @@
 import { describe, it, expect } from "bun:test";
-import { signupSchema, loginSchema } from "../validators/auth.validators";
-import { createDuelSchema, submitResultSchema, duelIdSchema } from "../validators/duel.validators";
-import { usernameSchema, userIdSchema, updatePfpSchema } from "../validators/user.validators";
-import { limitSchema, offsetSchema } from "../validators/leaderboard.validators";
+import { signupSchema, loginSchema } from "../api/v1/validators/auth.validators";
+import { createDuelSchema, submitResultSchema, duelIdSchema } from "../api/v1/validators/duel.validators";
+import { usernameSchema, userIdSchema, updatePfpSchema } from "../api/v1/validators/user.validators";
+import { limitSchema, offsetSchema } from "../api/v1/validators/leaderboard.validators";
 
 // ─── Auth Validators ──────────────────────────────────────────────────────────
 

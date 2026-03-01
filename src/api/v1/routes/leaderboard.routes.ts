@@ -4,7 +4,7 @@ import {
     getPlayerRankHandler,
     refreshRanksHandler,
 } from "../controllers/leaderboard.controller";
-import { adminMiddleware } from "../middleware/admin.middleware";
+import { adminMiddleware } from "../../../middleware/admin.middleware";
 
 export const leaderboardRoutes = new Hono();
 

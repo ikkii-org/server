@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { signupHandler, loginHandler, logoutHandler } from "../controllers/auth.controller";
-import { authMiddleware } from "../middleware/auth.middleware";
-import { rateLimit } from "../middleware/rate-limit.middleware";
+import { authMiddleware } from "../../../middleware/auth.middleware";
+import { rateLimit } from "../../../middleware/rate-limit.middleware";
 
 export const authRoutes = new Hono();
 

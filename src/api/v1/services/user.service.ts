@@ -1,7 +1,10 @@
-import { db } from "../db";
-import { users, portfolio } from "../db/schema";
+import { db } from "../../../db";
+import { users, portfolio } from "../../../db/schema";
 import { eq, sql } from "drizzle-orm";
-import type { User } from "../db/schema";
+import type { User } from "../../../db/schema";
+import type { PlayerProfile } from "../models/user.model";
+
+export type { PlayerProfile };
 
 // ─── Lookups ──────────────────────────────────────────────────────────────────
 
@@ -18,22 +21,6 @@ export async function getPlayerById(userId: string): Promise<User> {
 }
 
 // ─── Profile ──────────────────────────────────────────────────────────────────
-
-export interface PlayerProfile {
-    userId: string;
-    username: string;
-    pfp: string | null;
-    wins: number;
-    losses: number;
-    winPercentage: number;
-    portfolio: {
-        solanaBalance: number;
-        currentRank: number;
-        previousRank: number;
-        totalStakeWon: number;
-        totalStakeLost: number;
-    } | null;
-}
 
 export async function getPlayerProfile(username: string): Promise<PlayerProfile> {
     const player = await getPlayer(username);
