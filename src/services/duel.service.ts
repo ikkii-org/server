@@ -1,8 +1,7 @@
 import { db } from "../db";
 import { duels, users } from "../db/schema";
-import { eq, and, lt } from "drizzle-orm";
+import { eq, and, lt, sql } from "drizzle-orm";
 import type { DuelStatus } from "../types/duel.types";
-import { recordWin, recordLoss } from "./user.service";
 
 // Infer the row type directly from the schema
 type DuelRow = typeof duels.$inferSelect;
@@ -166,7 +165,7 @@ export async function submitResult(
     // Both players submitted — resolve
     if (updated.player1SubmittedWinner && updated.player2SubmittedWinner) {
         if (updated.player1SubmittedWinner === updated.player2SubmittedWinner) {
-            // Consensus → settle
+            // Consensus → settle (wrap in transaction for atomicity)
             const winnerUsername = updated.player1SubmittedWinner;
             const winner = await requireUser(winnerUsername);
             const loserUsername =
@@ -175,15 +174,18 @@ export async function submitResult(
                     : updated.player1Username;
             const loser = await requireUser(loserUsername);
 
-            const [settled] = await db
-                .update(duels)
-                .set({ winnerUsername, winnerId: winner.id, status: "SETTLED" })
-                .where(eq(duels.id, duelId))
-                .returning();
+            const settled = await db.transaction(async (tx) => {
+                const [row] = await tx
+                    .update(duels)
+                    .set({ winnerUsername, winnerId: winner.id, status: "SETTLED" })
+                    .where(eq(duels.id, duelId))
+                    .returning();
 
-            // Update win/loss stats
-            await recordWin(winner.id, updated.stakeAmount);
-            await recordLoss(loser.id, updated.stakeAmount);
+                await tx.update(users).set({ wins: sql`${users.wins} + 1`, updatedAt: new Date() }).where(eq(users.id, winner.id));
+                await tx.update(users).set({ losses: sql`${users.losses} + 1`, updatedAt: new Date() }).where(eq(users.id, loser.id));
+
+                return row;
+            });
 
             return { duel: mapRow(settled), resolved: true };
         } else {

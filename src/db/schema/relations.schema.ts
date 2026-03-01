@@ -18,13 +18,6 @@ export const userToGames = relations(users, ({ many }) => ({
   games: many(games),
 }));
 
-export const gamesToUser = relations(games, ({ one }) => ({
-  user: one(users, {
-    fields: [games.userId],
-    references: [users.id],
-  }),
-}));
-
 export const walletToBalance = relations(wallet, ({ one }) => ({
   user: one(users, {
     fields: [wallet.userId],

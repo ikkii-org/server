@@ -14,8 +14,6 @@ export async function signupHandler(c: Context) {
     const { username, walletKey, password, pfp } = result.data;
     const signupResult = await signup(username, walletKey, password, pfp);
 
-    await c.var.session.update({ userId: signupResult.user.id, username: signupResult.user.username });
-
     return c.json(signupResult, 201);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Signup failed";
@@ -35,8 +33,6 @@ export async function loginHandler(c: Context) {
     const { username, password } = result.data;
     const loginResult = await login(username, password);
 
-    await c.var.session.update({ userId: loginResult.user.id, username: loginResult.user.username });
-
     return c.json(loginResult, 200);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Login failed";
@@ -45,6 +41,6 @@ export async function loginHandler(c: Context) {
 }
 
 export async function logoutHandler(c: Context) {
-  c.var.session.delete();
+  // JWT is stateless — clients should discard the token on their end.
   return c.json({ message: "Logged out" }, 200);
 }

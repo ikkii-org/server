@@ -9,6 +9,13 @@ import {
     transferStake,
 } from "../services/escrow.service";
 
+function requireSelf(c: Context, userId: string): Response | null {
+    if (c.get("userId") !== userId) {
+        return c.json({ error: "Forbidden" }, 403) as Response;
+    }
+    return null;
+}
+
 export async function createWalletHandler(c: Context) {
     try {
         const { userId, token } = await c.req.json();
@@ -28,6 +35,9 @@ export async function createWalletHandler(c: Context) {
 export async function getWalletHandler(c: Context) {
     try {
         const userId = c.req.param("userId");
+        const forbidden = requireSelf(c, userId);
+        if (forbidden) return forbidden;
+
         const w = await getWallet(userId);
         return c.json({ wallet: w }, 200);
     } catch (error) {
@@ -39,6 +49,9 @@ export async function getWalletHandler(c: Context) {
 export async function depositHandler(c: Context) {
     try {
         const userId = c.req.param("userId");
+        const forbidden = requireSelf(c, userId);
+        if (forbidden) return forbidden;
+
         const { amount } = await c.req.json();
 
         if (!amount || amount <= 0) {
@@ -56,6 +69,9 @@ export async function depositHandler(c: Context) {
 export async function withdrawHandler(c: Context) {
     try {
         const userId = c.req.param("userId");
+        const forbidden = requireSelf(c, userId);
+        if (forbidden) return forbidden;
+
         const { amount } = await c.req.json();
 
         if (!amount || amount <= 0) {

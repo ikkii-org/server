@@ -17,4 +17,8 @@ export const env = {
     JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN ?? "1h",
     PORT: parseInt(process.env.PORT ?? "3000", 10),
     NODE_ENV: process.env.NODE_ENV ?? "development",
+    /** Secret key required in X-Admin-Secret header to access admin-only endpoints */
+    ADMIN_SECRET: process.env.ADMIN_SECRET ?? "",
+    /** Comma-separated list of allowed CORS origins, e.g. "https://app.ikkii.gg,http://localhost:3000" */
+    ALLOWED_ORIGINS: (process.env.ALLOWED_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean),
 } as const;

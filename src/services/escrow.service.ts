@@ -71,24 +71,24 @@ export async function unlockFunds(userId: string, amount: number): Promise<Walle
 
 /**
  * Deduct `amount` from lockedBalance and credit it to the winner's availableBalance.
- * Used after a duel is settled.
+ * Used after a duel is settled. Wrapped in a single DB transaction for atomicity.
  */
 export async function transferStake(
     loserUserId: string,
     winnerUserId: string,
     amount: number
 ): Promise<void> {
-    // Deduct from loser's locked balance
-    await db
-        .update(wallet)
-        .set({ lockedBalance: sql`${wallet.lockedBalance} - ${amount}` })
-        .where(eq(wallet.userId, loserUserId));
+    await db.transaction(async (tx) => {
+        await tx
+            .update(wallet)
+            .set({ lockedBalance: sql`${wallet.lockedBalance} - ${amount}` })
+            .where(eq(wallet.userId, loserUserId));
 
-    // Credit to winner's available balance
-    await db
-        .update(wallet)
-        .set({ availableBalance: sql`${wallet.availableBalance} + ${amount}` })
-        .where(eq(wallet.userId, winnerUserId));
+        await tx
+            .update(wallet)
+            .set({ availableBalance: sql`${wallet.availableBalance} + ${amount}` })
+            .where(eq(wallet.userId, winnerUserId));
+    });
 }
 
 /**

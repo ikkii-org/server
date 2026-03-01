@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { duels, gameProfiles, matches } from "../db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { recordWin, recordLoss } from "./user.service";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -81,12 +81,16 @@ export async function verifyDisputedDuel(duelId: string): Promise<VerificationRe
     const [match1] = await db
         .select()
         .from(matches)
-        .where(eq(matches.gameprofileId, profile1.id));
+        .where(eq(matches.gameprofileId, profile1.id))
+        .orderBy(desc(matches.createdAt))
+        .limit(1);
 
     const [match2] = await db
         .select()
         .from(matches)
-        .where(eq(matches.gameprofileId, profile2.id));
+        .where(eq(matches.gameprofileId, profile2.id))
+        .orderBy(desc(matches.createdAt))
+        .limit(1);
 
     const p1Won = match1?.won ?? false;
     const p2Won = match2?.won ?? false;

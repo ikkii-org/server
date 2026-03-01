@@ -28,7 +28,7 @@ export async function getPlayerByIdHandler(c: Context) {
             return c.json({ error: result.error.issues[0].message }, 400);
         }
 
-        const player = await getPlayerById(String(result.data));
+        const player = await getPlayerById(result.data);
         return c.json({ player }, 200);
     } catch (error) {
         const message = error instanceof Error ? error.message : "Player not found";
@@ -43,6 +43,10 @@ export async function updatePfpHandler(c: Context) {
 
         if (!usernameResult.success) {
             return c.json({ error: usernameResult.error.issues[0].message }, 400);
+        }
+
+        if (c.get("username") !== usernameResult.data) {
+            return c.json({ error: "Forbidden" }, 403);
         }
 
         const body = await c.req.json();

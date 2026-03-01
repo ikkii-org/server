@@ -7,10 +7,11 @@ import {
     getDuel,
     cleanUpExpiredDuels,
 } from "../services/duel.service";
-import { createDuelSchema, joinDuelSchema, submitResultSchema, cancelDuelSchema, duelIdSchema } from "../validators/duel.validators";
+import { createDuelSchema, submitResultSchema, duelIdSchema } from "../validators/duel.validators";
 
 export async function createDuelHandler(c: Context) {
     try {
+        const username = c.get("username") as string;
         const body = await c.req.json();
         const result = createDuelSchema.safeParse(body);
 
@@ -18,7 +19,7 @@ export async function createDuelHandler(c: Context) {
             return c.json({ error: result.error.issues[0].message }, 400);
         }
 
-        const { username, stakeAmount, tokenMint, gameId, expiresInMs } = result.data;
+        const { stakeAmount, tokenMint, gameId, expiresInMs } = result.data;
         const duel = await createDuel(username, stakeAmount, tokenMint, gameId, expiresInMs);
         return c.json({ duel }, 201);
     } catch (error) {
@@ -34,14 +35,8 @@ export async function joinDuelHandler(c: Context) {
             return c.json({ error: duelIdResult.error.issues[0].message }, 400);
         }
 
-        const body = await c.req.json();
-        const result = joinDuelSchema.safeParse(body);
-
-        if (!result.success) {
-            return c.json({ error: result.error.issues[0].message }, 400);
-        }
-
-        const duel = await joinDuel(duelIdResult.data, result.data.username);
+        const username = c.get("username") as string;
+        const duel = await joinDuel(duelIdResult.data, username);
         return c.json({ duel }, 200);
     } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to join duel";
@@ -56,6 +51,7 @@ export async function submitResultHandler(c: Context) {
             return c.json({ error: duelIdResult.error.issues[0].message }, 400);
         }
 
+        const username = c.get("username") as string;
         const body = await c.req.json();
         const result = submitResultSchema.safeParse(body);
 
@@ -63,8 +59,7 @@ export async function submitResultHandler(c: Context) {
             return c.json({ error: result.error.issues[0].message }, 400);
         }
 
-        const { username, winnerUsername } = result.data;
-        const submitRes = await submitResult(duelIdResult.data, username, winnerUsername);
+        const submitRes = await submitResult(duelIdResult.data, username, result.data.winnerUsername);
         return c.json(submitRes, 200);
     } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to submit result";
@@ -79,14 +74,8 @@ export async function cancelDuelHandler(c: Context) {
             return c.json({ error: duelIdResult.error.issues[0].message }, 400);
         }
 
-        const body = await c.req.json();
-        const result = cancelDuelSchema.safeParse(body);
-
-        if (!result.success) {
-            return c.json({ error: result.error.issues[0].message }, 400);
-        }
-
-        const duel = await cancelDuel(duelIdResult.data, result.data.username);
+        const username = c.get("username") as string;
+        const duel = await cancelDuel(duelIdResult.data, username);
         return c.json({ duel }, 200);
     } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to cancel duel";

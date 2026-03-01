@@ -7,6 +7,7 @@ import {
     getDuelHandler,
     cleanUpExpiredDuelsHandler,
 } from "../controllers/duel.controller";
+import { adminMiddleware } from "../middleware/admin.middleware";
 
 export const duelRoutes = new Hono();
 
@@ -25,5 +26,6 @@ duelRoutes.post("/:id/result", submitResultHandler);
 // POST /duels/:id/cancel — cancel an open duel (creator only)
 duelRoutes.post("/:id/cancel", cancelDuelHandler);
 
-// POST /duels/cleanup    — cancel all expired open duels
-duelRoutes.post("/cleanup", cleanUpExpiredDuelsHandler);
+// POST /duels/cleanup    — cancel all expired open duels (admin only)
+duelRoutes.post("/cleanup", adminMiddleware, cleanUpExpiredDuelsHandler);
+

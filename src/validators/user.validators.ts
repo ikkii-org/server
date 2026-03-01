@@ -18,12 +18,8 @@ export const solanaAddressSchema = z
 
 // ─── User-specific schemas ────────────────────────────────────────────────────
 
-// User ID: positive integer as string
-export const userIdSchema = z
-    .string()
-    .regex(/^\d+$/, "Invalid user ID")
-    .transform(Number)
-    .pipe(z.number().positive("User ID must be positive"));
+// User ID: UUID v4
+export const userIdSchema = z.string().uuid("Invalid user ID");
 
 const pfpSchema = z
     .string()

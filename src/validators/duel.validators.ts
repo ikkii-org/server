@@ -10,27 +10,15 @@ export const duelIdSchema = z
     .uuid("Invalid duel ID format");
 
 export const createDuelSchema = z.object({
-    username: usernameSchema,
     stakeAmount: z.number().positive("Stake amount must be positive"),
     tokenMint: solanaAddressSchema,
-    gameId: z.string().optional(),
+    gameId: z.string().uuid().optional(),
     expiresInMs: z.number().positive().optional(),
 });
 
-export const joinDuelSchema = z.object({
-    username: usernameSchema,
-});
-
 export const submitResultSchema = z.object({
-    username: usernameSchema,
     winnerUsername: usernameSchema,
 });
 
-export const cancelDuelSchema = z.object({
-    username: usernameSchema,
-});
-
 export type CreateDuelInput = z.infer<typeof createDuelSchema>;
-export type JoinDuelInput = z.infer<typeof joinDuelSchema>;
 export type SubmitResultInput = z.infer<typeof submitResultSchema>;
-export type CancelDuelInput = z.infer<typeof cancelDuelSchema>;

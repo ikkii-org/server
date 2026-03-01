@@ -1,7 +1,6 @@
-import { Context, Hono, Next } from "hono";
+import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
-import { useSession } from "@hono/session";
 import { env } from "./config/env";
 
 import { authMiddleware } from "./middleware/auth.middleware";
@@ -17,38 +16,17 @@ import { HTTPException } from "hono/http-exception";
 
 const app = new Hono()
   .onError((err, c) => {
-    // Report _all_ unhandled errors.
     Sentry.captureException(err);
     if (err instanceof HTTPException) {
       return err.getResponse();
     }
-    // Or just report errors which are not instances of HTTPException
-    // Sentry.captureException(err);
     console.error("Unhandled error:", err);
     return c.json({ error: "Internal server error" }, 500);
-  })
-  .use(async (c: Context, next: Next) => {
-    // Only set user context if session exists and has user data
-    const sessionData = await c.var.session?.get();
-    if (sessionData?.username) {
-      Sentry.setUser({
-        username: sessionData.username,
-      });
-    }
-
-    return next();
   });
 
 // ─── Global middlewares ───────────────────────────────────────────────────────
 app.use("*", logger());
-app.use("*", cors());
-app.use(
-  "*",
-  useSession({
-    secret: env.COOKIE_SECRET,
-    duration: { absolute: 60 * 60 * 24 }, // 24 hours in seconds
-  }),
-);
+app.use("*", cors(env.ALLOWED_ORIGINS.length > 0 ? { origin: env.ALLOWED_ORIGINS } : undefined));
 
 // ─── Public routes (no auth) ──────────────────────────────────────────────────
 app.route("/health", healthRoutes);
@@ -66,9 +44,12 @@ app.route("/duels", duelRoutes);
 app.route("/escrow", escrowRoutes);
 app.route("/leaderboard", leaderboardRoutes);
 app.route("/verification", verificationRoutes);
-app.get("/debug-sentry", () => {
-  throw new Error("My first Sentry error!");
-});
+if (env.NODE_ENV !== "production") {
+  app.get("/debug-sentry", () => {
+    throw new Error("My first Sentry error!");
+  });
+}
+
 // ─── Error handlers ───────────────────────────────────────────────────────────
 app.notFound((c) => {
   return c.json({ error: "Not found" }, 404);

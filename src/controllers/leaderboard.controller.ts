@@ -1,19 +1,21 @@
 import { Context } from "hono";
 import { getLeaderboard, getPlayerRank, refreshRanks } from "../services/leaderboard.service";
-import { limitSchema, usernameSchema } from "../validators/leaderboard.validators";
+import { limitSchema, offsetSchema, usernameSchema } from "../validators/leaderboard.validators";
 
 export async function getLeaderboardHandler(c: Context) {
     try {
-        const limitParam = c.req.query("limit");
-        const limitResult = limitSchema.safeParse(limitParam);
-
+        const limitResult = limitSchema.safeParse(c.req.query("limit"));
         if (!limitResult.success) {
             return c.json({ error: limitResult.error.issues[0].message }, 400);
         }
 
-        const limit = limitResult.data;
-        const board = await getLeaderboard(limit);
-        return c.json({ leaderboard: board, count: board.length }, 200);
+        const offsetResult = offsetSchema.safeParse(c.req.query("offset"));
+        if (!offsetResult.success) {
+            return c.json({ error: offsetResult.error.issues[0].message }, 400);
+        }
+
+        const board = await getLeaderboard(limitResult.data, offsetResult.data);
+        return c.json({ leaderboard: board, count: board.length, offset: offsetResult.data }, 200);
     } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to fetch leaderboard";
         return c.json({ error: message }, 500);
