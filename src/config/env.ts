@@ -21,4 +21,6 @@ export const env = {
     ADMIN_SECRET: process.env.ADMIN_SECRET ?? "",
     /** Comma-separated list of allowed CORS origins, e.g. "https://app.ikkii.gg,http://localhost:3000" */
     ALLOWED_ORIGINS: (process.env.ALLOWED_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean),
+
+    REDIS_URL: requireEnv("REDIS_URL"),
 } as const;
