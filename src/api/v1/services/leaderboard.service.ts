@@ -2,6 +2,7 @@ import { db } from "../../../db";
 import { users, portfolio } from "../../../db/schema";
 import { eq, desc, sql } from "drizzle-orm";
 import type { LeaderboardEntry } from "../models/leaderboard.model";
+import { get, setLRU, del, CACHE_KEYS } from "./cache.service";
 
 export type { LeaderboardEntry };
 
@@ -10,8 +11,25 @@ export type { LeaderboardEntry };
 /**
  * Returns players ranked by wins descending, then totalStakeWon descending.
  * Supports offset-based pagination via `limit` and `offset`.
+ * 
+ * Uses cache-aside pattern:
+ * 1. Check cache first
+ * 2. If cache hit → return cached data
+ * 3. If cache miss → query DB, cache result, return data
  */
 export async function getLeaderboard(limit = 50, offset = 0): Promise<LeaderboardEntry[]> {
+    // Step 1: Build the cache key for this specific query
+    const cacheKey = CACHE_KEYS.LEADERBOARD(limit, offset);
+
+    // Step 2: Try to get from cache
+    const cached = await get<LeaderboardEntry[]>(cacheKey);
+    if (cached !== null) {
+        console.log(`[Leaderboard] Cache HIT for ${cacheKey}`);
+        return cached;
+    }
+    console.log(`[Leaderboard] Cache MISS for ${cacheKey}`);
+
+    // Step 3: Cache miss - query the database
     const rows = await db
         .select({
             userId: users.id,
@@ -30,7 +48,7 @@ export async function getLeaderboard(limit = 50, offset = 0): Promise<Leaderboar
         .limit(limit)
         .offset(offset);
 
-    return rows.map((row, idx) => {
+    const leaderboard = rows.map((row, idx) => {
         const totalGames = row.wins + row.losses;
         const winPercentage =
             totalGames > 0
@@ -51,6 +69,12 @@ export async function getLeaderboard(limit = 50, offset = 0): Promise<Leaderboar
             previousRank: row.previousRank,
         };
     });
+
+    // Step 4: Store in cache for next request
+    await setLRU(cacheKey, leaderboard);
+    console.log(`[Leaderboard] Cached ${leaderboard.length} entries at ${cacheKey}`);
+
+    return leaderboard;
 }
 
 /**
