@@ -12,6 +12,10 @@ export const CACHE_KEYS = {
     
     // User stats (wins, losses, portfolio) - changes after duels
     USER_STATS: (username: string) => `user:stats:${username}`,
+    
+    // Open duels list: keyed by limit and offset
+    //   --(to be implemented)--
+    // OPEN_DUELS: (limit: number, offset: number) => `duels:open:${limit}:${offset}`,
 } as const;
 
 // ─── TTL Configuration (in seconds) ──────────────────────────────────────────
@@ -20,6 +24,7 @@ export const TTL = {
     LEADERBOARD: 15 * 60,       // 15 minutes
     USER_STATIC: 60 * 60,       // 1 hour (rarely changes)
     USER_STATS: 5 * 60,         // 5 minutes (changes after duels)
+    OPEN_DUELS: 30,             // 30 seconds (changes frequently)
 } as const;
 
 // ─── Core Cache Operations ────────────────────────────────────────────────────
