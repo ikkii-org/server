@@ -6,12 +6,20 @@ import { redisClient } from "../../../config/redis";
 export const CACHE_KEYS = {
     // Leaderboard: keyed by limit and offset for pagination
     LEADERBOARD: (limit: number, offset: number) => `leaderboard:${limit}:${offset}`,
+    
+    // User static data (username, pfp, userId) - rarely changes
+    USER_STATIC: (username: string) => `user:static:${username}`,
+    
+    // User stats (wins, losses, portfolio) - changes after duels
+    USER_STATS: (username: string) => `user:stats:${username}`,
 } as const;
 
 // ─── TTL Configuration (in seconds) ──────────────────────────────────────────
 
 export const TTL = {
-    LEADERBOARD: 15 * 60,     // 15 minutes
+    LEADERBOARD: 15 * 60,       // 15 minutes
+    USER_STATIC: 60 * 60,       // 1 hour (rarely changes)
+    USER_STATS: 5 * 60,         // 5 minutes (changes after duels)
 } as const;
 
 // ─── Core Cache Operations ────────────────────────────────────────────────────

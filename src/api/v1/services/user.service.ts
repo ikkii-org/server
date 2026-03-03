@@ -2,7 +2,8 @@ import { db } from "../../../db";
 import { users, portfolio } from "../../../db/schema";
 import { eq, sql } from "drizzle-orm";
 import type { User } from "../../../db/schema";
-import type { PlayerProfile } from "../models/user.model";
+import type { PlayerProfile, UserStatic, UserStats } from "../models/user.model";
+import { get, setWithTTL, del, CACHE_KEYS, TTL } from "./cache.service";
 
 export type { PlayerProfile };
 
@@ -23,16 +24,38 @@ export async function getPlayerById(userId: string): Promise<User> {
 // ─── Profile ──────────────────────────────────────────────────────────────────
 
 export async function getPlayerProfile(username: string): Promise<PlayerProfile> {
+    // Step 1: Build cache keys
+    const staticKey = CACHE_KEYS.USER_STATIC(username);
+    const statsKey = CACHE_KEYS.USER_STATS(username);
+
+    // Step 2: Check both caches
+    const [cachedStatic, cachedStats] = await Promise.all([
+        get<UserStatic>(staticKey),
+        get<UserStats>(statsKey),
+    ]);
+
+    // Step 3: If both hit, merge and return
+    if (cachedStatic !== null && cachedStats !== null) {
+        console.log(`[User] Cache HIT for ${username} (static + stats)`);
+        return { ...cachedStatic, ...cachedStats };
+    }
+    console.log(`[User] Cache MISS for ${username}`);
+
+    // Step 4: Cache miss - query database
     const player = await getPlayer(username);
     const [port] = await db.select().from(portfolio).where(eq(portfolio.userId, player.id));
 
     const total = player.wins + player.losses;
     const winPercentage = total > 0 ? Math.round((player.wins / total) * 10000) / 100 : 0;
 
-    return {
+    // Step 5: Build cache objects
+    const staticData: UserStatic = {
         userId: player.id,
         username: player.username,
         pfp: player.pfp ?? null,
+    };
+
+    const statsData: UserStats = {
         wins: player.wins,
         losses: player.losses,
         winPercentage,
@@ -46,6 +69,15 @@ export async function getPlayerProfile(username: string): Promise<PlayerProfile>
             }
             : null,
     };
+
+    // Step 6: Cache both with different TTLs
+    await Promise.all([
+        setWithTTL(staticKey, staticData, TTL.USER_STATIC),
+        setWithTTL(statsKey, statsData, TTL.USER_STATS),
+    ]);
+    console.log(`[User] Cached ${username} - static (${TTL.USER_STATIC}s), stats (${TTL.USER_STATS}s)`);
+
+    return { ...staticData, ...statsData };
 }
 
 // ─── Mutations ────────────────────────────────────────────────────────────────
