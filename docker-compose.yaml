@@ -8,12 +8,15 @@ services:
     env_file:
       - .env
     environment:
-      - DATABASE_URL=
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/ikki
+      - REDIS_URL=redis://redis:6379
     volumes:
       - .:/app
       - /app/node_modules
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - ikki-network
@@ -30,6 +33,23 @@ services:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ikki-network
+
+  redis:
+    image: redis:7-alpine
+    expose:
+      - "6379"
+    # Hybrid eviction: TTL expires normally, LRU kicks in under memory pressure
+    command: >
+      redis-server
+      --maxmemory 128mb
+      --maxmemory-policy volatile-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
