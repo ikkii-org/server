@@ -3,7 +3,6 @@ import { duels, users } from "../../../db/schema";
 import { eq, and, lt, sql } from "drizzle-orm";
 import type { DuelStatus } from "../types/duel.types";
 import type { Duel, DuelSubmitResult } from "../models/duel.model";
-import { invalidateLeaderboard } from "./cache.service";
 
 export type { Duel, DuelSubmitResult };
 
@@ -170,9 +169,6 @@ export async function submitResult(
 
                 return row;
             });
-
-            // Invalidate leaderboard cache since rankings changed
-            await invalidateLeaderboard();
 
             return { duel: mapRow(settled), resolved: true };
         } else {

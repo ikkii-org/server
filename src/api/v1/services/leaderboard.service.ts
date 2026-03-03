@@ -2,7 +2,7 @@ import { db } from "../../../db";
 import { users, portfolio } from "../../../db/schema";
 import { eq, desc, sql } from "drizzle-orm";
 import type { LeaderboardEntry } from "../models/leaderboard.model";
-import { get, setLRU, del, CACHE_KEYS } from "./cache.service";
+import { get, setWithTTL, CACHE_KEYS, TTL } from "./cache.service";
 
 export type { LeaderboardEntry };
 
@@ -70,9 +70,9 @@ export async function getLeaderboard(limit = 50, offset = 0): Promise<Leaderboar
         };
     });
 
-    // Step 4: Store in cache for next request
-    await setLRU(cacheKey, leaderboard);
-    console.log(`[Leaderboard] Cached ${leaderboard.length} entries at ${cacheKey}`);
+    // Step 4: Store in cache with TTL
+    await setWithTTL(cacheKey, leaderboard, TTL.LEADERBOARD);
+    console.log(`[Leaderboard] Cached ${leaderboard.length} entries at ${cacheKey} (TTL: ${TTL.LEADERBOARD}s)`);
 
     return leaderboard;
 }

@@ -8,6 +8,12 @@ export const CACHE_KEYS = {
     LEADERBOARD: (limit: number, offset: number) => `leaderboard:${limit}:${offset}`,
 } as const;
 
+// ─── TTL Configuration (in seconds) ──────────────────────────────────────────
+
+export const TTL = {
+    LEADERBOARD: 15 * 60,     // 15 minutes
+} as const;
+
 // ─── Core Cache Operations ────────────────────────────────────────────────────
 
 /**
@@ -38,6 +44,21 @@ export async function setLRU<T>(key: string, value: T): Promise<boolean> {
         return true;
     } catch (error) {
         console.error(`[Cache] SET error for "${key}":`, error);
+        return false;
+    }
+}
+
+/**
+ * Set a cached value with TTL (auto-expires).
+ * Use for data that should refresh periodically.
+ */
+export async function setWithTTL<T>(key: string, value: T, ttlSeconds: number): Promise<boolean> {
+    try {
+        const serialized = JSON.stringify(value);
+        await redisClient.setEx(key, ttlSeconds, serialized);
+        return true;
+    } catch (error) {
+        console.error(`[Cache] SET with TTL error for "${key}":`, error);
         return false;
     }
 }
@@ -83,15 +104,4 @@ export async function clearCache(): Promise<boolean> {
         console.error("[Cache] Clear cache error:", error);
         return false;
     }
-}
-
-// ─── Domain-Specific Invalidation ─────────────────────────────────────────────
-
-/**
- * Invalidate all cached leaderboard pages.
- * Call this when any player's wins/losses/stakes change.
- */
-export async function invalidateLeaderboard(): Promise<boolean> {
-    console.log("[Cache] Invalidating all leaderboard entries");
-    return delPattern("leaderboard:*");
 }
