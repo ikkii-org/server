@@ -3,6 +3,7 @@ import { duels, users } from "../../../db/schema";
 import { eq, and, lt, sql } from "drizzle-orm";
 import type { DuelStatus } from "../types/duel.types";
 import type { Duel, DuelSubmitResult } from "../models/duel.model";
+import { publish, CHANNELS } from "../../../services/pubsub.service";
 
 export type { Duel, DuelSubmitResult };
 
@@ -79,7 +80,12 @@ export async function createDuel(
         })
         .returning();
 
-    return mapRow(duel);
+    const mapped = mapRow(duel);
+
+    // Publish event so all WebSocket clients see the new duel
+    await publish(CHANNELS.DUEL_CREATED, "DUEL_CREATED", mapped);
+
+    return mapped;
 }
 
 /**
@@ -104,7 +110,12 @@ export async function joinDuel(duelId: string, player2Username: string): Promise
         .where(eq(duels.id, duelId))
         .returning();
 
-    return mapRow(updated);
+    const mapped = mapRow(updated);
+
+    // Publish to anyone watching this specific duel
+    await publish(CHANNELS.DUEL_JOINED(duelId), "DUEL_JOINED", mapped);
+
+    return mapped;
 }
 
 /**
@@ -170,7 +181,12 @@ export async function submitResult(
                 return row;
             });
 
-            return { duel: mapRow(settled), resolved: true };
+            const settledMapped = mapRow(settled);
+
+            // Publish settlement event
+            await publish(CHANNELS.DUEL_SETTLED(duelId), "DUEL_SETTLED", settledMapped);
+
+            return { duel: settledMapped, resolved: true };
         } else {
             // Dispute
             const [disputed] = await db
@@ -179,7 +195,12 @@ export async function submitResult(
                 .where(eq(duels.id, duelId))
                 .returning();
 
-            return { duel: mapRow(disputed), resolved: false };
+            const disputedMapped = mapRow(disputed);
+
+            // Publish dispute event
+            await publish(CHANNELS.DUEL_DISPUTED(duelId), "DUEL_DISPUTED", disputedMapped);
+
+            return { duel: disputedMapped, resolved: false };
         }
     }
 
@@ -202,7 +223,12 @@ export async function cancelDuel(duelId: string, username: string): Promise<Duel
         .where(eq(duels.id, duelId))
         .returning();
 
-    return mapRow(cancelled);
+    const cancelledMapped = mapRow(cancelled);
+
+    // Publish cancellation event
+    await publish(CHANNELS.DUEL_CANCELLED, "DUEL_CANCELLED", cancelledMapped);
+
+    return cancelledMapped;
 }
 
 /**
