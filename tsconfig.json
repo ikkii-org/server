@@ -6,9 +6,22 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["node", "bun-types"],
+    "types": [
+      "node",
+      "bun-types"
+    ],
     "outDir": "dist",
-    "rootDir": "src"
+    "baseUrl": ".",
+    "paths": {
+      "ikki-escrow/*": [
+        "../escrow/*"
+      ]
+    },
+    "resolveJsonModule": true
   },
-  "include": ["src/**/*"]
+  "include": [
+    "src/**/*",
+    "../escrow/target/types/**/*.ts",
+    "../escrow/sdk/src/**/*.ts"
+  ]
 }

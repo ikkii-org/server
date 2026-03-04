@@ -1,9 +1,15 @@
 import { db } from "../../../db";
-import { duels, users } from "../../../db/schema";
+import { duels, users, games } from "../../../db/schema";
 import { eq, and, lt, sql } from "drizzle-orm";
 import type { DuelStatus } from "../types/duel.types";
 import type { Duel, DuelSubmitResult } from "../models/duel.model";
 import { publish, CHANNELS } from "../../../services/pubsub.service";
+import {
+    settleOnChain,
+    disputeOnChain,
+    resolveDisputeOnChain,
+    verifyWinnerViaGameApi,
+} from "./onchain.service";
 
 export type { Duel, DuelSubmitResult };
 
@@ -27,6 +33,7 @@ function mapRow(row: DuelRow): Duel {
         player1SubmittedWinner: row.player1SubmittedWinner ?? null,
         player2SubmittedWinner: row.player2SubmittedWinner ?? null,
         gameId: row.gameId ?? null,
+        txSignature: row.txSignature ?? null,
         expiresAt: row.expiresAt,
         createdAt: row.createdAt,
     };
@@ -159,7 +166,7 @@ export async function submitResult(
     // Both players submitted — resolve
     if (updated.player1SubmittedWinner && updated.player2SubmittedWinner) {
         if (updated.player1SubmittedWinner === updated.player2SubmittedWinner) {
-            // Consensus → settle (wrap in transaction for atomicity)
+            // Consensus → settle on-chain first, then update DB
             const winnerUsername = updated.player1SubmittedWinner;
             const winner = await requireUser(winnerUsername);
             const loserUsername =
@@ -168,10 +175,19 @@ export async function submitResult(
                     : updated.player1Username;
             const loser = await requireUser(loserUsername);
 
+            // On-chain settlement (authority signs)
+            let txSignature: string | null = null;
+            try {
+                txSignature = await settleOnChain(duelId, winner.walletKey);
+            } catch (err) {
+                console.error(`On-chain settle failed for duel ${duelId}:`, err);
+                throw new Error("On-chain settlement failed. Duel remains ACTIVE.");
+            }
+
             const settled = await db.transaction(async (tx) => {
                 const [row] = await tx
                     .update(duels)
-                    .set({ winnerUsername, winnerId: winner.id, status: "SETTLED" })
+                    .set({ winnerUsername, winnerId: winner.id, status: "SETTLED", txSignature })
                     .where(eq(duels.id, duelId))
                     .returning();
 
@@ -188,10 +204,18 @@ export async function submitResult(
 
             return { duel: settledMapped, resolved: true };
         } else {
-            // Dispute
+            // Dispute — mark on-chain, then attempt game API auto-resolution
+            let disputeTxSig: string | null = null;
+            try {
+                disputeTxSig = await disputeOnChain(duelId);
+            } catch (err) {
+                console.error(`On-chain dispute failed for duel ${duelId}:`, err);
+                throw new Error("On-chain dispute marking failed.");
+            }
+
             const [disputed] = await db
                 .update(duels)
-                .set({ status: "DISPUTED" })
+                .set({ status: "DISPUTED", txSignature: disputeTxSig })
                 .where(eq(duels.id, duelId))
                 .returning();
 
@@ -199,6 +223,53 @@ export async function submitResult(
 
             // Publish dispute event
             await publish(CHANNELS.DUEL_DISPUTED(duelId), "DUEL_DISPUTED", disputedMapped);
+
+            // Attempt auto-resolution via external game API
+            if (disputed.gameId) {
+                try {
+                    const [game] = await db.select().from(games).where(eq(games.id, disputed.gameId));
+                    if (game?.api) {
+                        const verifiedWinner = await verifyWinnerViaGameApi(game.api, duelId);
+                        if (verifiedWinner) {
+                            const verifiedUser = await requireUser(verifiedWinner);
+
+                            const resolveTxSig = await resolveDisputeOnChain(duelId, verifiedUser.walletKey);
+
+                            const loserUsername =
+                                verifiedWinner === disputed.player1Username
+                                    ? disputed.player2Username!
+                                    : disputed.player1Username;
+                            const loser = await requireUser(loserUsername);
+
+                            const resolved = await db.transaction(async (tx) => {
+                                const [row] = await tx
+                                    .update(duels)
+                                    .set({
+                                        winnerUsername: verifiedWinner,
+                                        winnerId: verifiedUser.id,
+                                        status: "SETTLED",
+                                        txSignature: resolveTxSig,
+                                    })
+                                    .where(eq(duels.id, duelId))
+                                    .returning();
+
+                                await tx.update(users).set({ wins: sql`${users.wins} + 1`, updatedAt: new Date() }).where(eq(users.id, verifiedUser.id));
+                                await tx.update(users).set({ losses: sql`${users.losses} + 1`, updatedAt: new Date() }).where(eq(users.id, loser.id));
+
+                                return row;
+                            });
+
+                            const resolvedMapped = mapRow(resolved);
+                            await publish(CHANNELS.DUEL_SETTLED(duelId), "DUEL_SETTLED", resolvedMapped);
+
+                            return { duel: resolvedMapped, resolved: true };
+                        }
+                    }
+                } catch (err) {
+                    // Auto-resolution failed — leave as DISPUTED for admin
+                    console.error(`Game API auto-resolution failed for duel ${duelId}:`, err);
+                }
+            }
 
             return { duel: disputedMapped, resolved: false };
         }

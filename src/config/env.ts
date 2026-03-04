@@ -23,4 +23,16 @@ export const env = {
     ALLOWED_ORIGINS: (process.env.ALLOWED_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean),
 
     REDIS_URL: requireEnv("REDIS_URL"),
+
+    // ── Solana / Escrow ─────────────────────────────────────────────────────
+    /** Solana RPC endpoint (e.g. https://api.devnet.solana.com) */
+    SOLANA_RPC_URL: requireEnv("SOLANA_RPC_URL"),
+    /** JSON-encoded 64-byte authority keypair array */
+    SOLANA_AUTHORITY_KEY: requireEnv("SOLANA_AUTHORITY_KEY"),
+    /** Deployed escrow program ID */
+    ESCROW_PROGRAM_ID: requireEnv("ESCROW_PROGRAM_ID"),
+    /** Treasury wallet public key (receives platform fees) */
+    TREASURY_PUBKEY: requireEnv("TREASURY_PUBKEY"),
+    /** SPL token mint address for duels (e.g. devnet USDC) */
+    TOKEN_MINT: requireEnv("TOKEN_MINT"),
 } as const;
