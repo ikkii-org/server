@@ -12,6 +12,8 @@ import { duelStatusEnum } from "./enums";
 export const games = pgTable("games", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: varchar("name", { length: 255 }).notNull().unique(),
+  /** External game API endpoint for match result verification (e.g. https://api.game.com/v1/matches/:matchId) */
+  api: varchar("api", { length: 500 }),
 });
 
 export const duels = pgTable(
@@ -44,6 +46,8 @@ export const duels = pgTable(
     gameId: uuid("game_id").references(() => games.id, {
       onDelete: "cascade",
     }),
+    /** Solana transaction signature for settlement/dispute/cancel (audit trail) */
+    txSignature: varchar("tx_signature", { length: 128 }),
   },
   (table) => {
     return {
