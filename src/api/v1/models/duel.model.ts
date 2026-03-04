@@ -14,6 +14,8 @@ export interface Duel {
     player1SubmittedWinner: string | null;
     player2SubmittedWinner: string | null;
     gameId: string | null;
+    player1GameProfileId: string | null;
+    player2GameProfileId: string | null;
     txSignature: string | null;
     expiresAt: Date;
     createdAt: Date;

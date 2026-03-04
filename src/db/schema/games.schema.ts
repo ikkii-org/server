@@ -6,12 +6,15 @@ import {
   boolean,
   real,
   index,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { users } from "./user.schema";
 import { duelStatusEnum } from "./enums";
 export const games = pgTable("games", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: varchar("name", { length: 255 }).notNull().unique(),
+  /** URL to the game's logo/icon for display in duel listings */
+  icon: varchar("icon", { length: 500 }),
   /** External game API endpoint for match result verification (e.g. https://api.game.com/v1/matches/:matchId) */
   api: varchar("api", { length: 500 }),
 });
@@ -46,6 +49,16 @@ export const duels = pgTable(
     gameId: uuid("game_id").references(() => games.id, {
       onDelete: "cascade",
     }),
+    /** Links to the creator's game profile for showing in-game info on duel listings */
+    player1GameProfileId: uuid("player1_game_profile_id").references(
+      () => gameProfiles.id,
+      { onDelete: "set null" },
+    ),
+    /** Links to the joiner's game profile (set when player 2 joins) */
+    player2GameProfileId: uuid("player2_game_profile_id").references(
+      () => gameProfiles.id,
+      { onDelete: "set null" },
+    ),
     /** Solana transaction signature for settlement/dispute/cancel (audit trail) */
     txSignature: varchar("tx_signature", { length: 128 }),
   },
@@ -57,32 +70,12 @@ export const duels = pgTable(
       winnerIdIdx: index("duels_winner_id_idx").on(table.winnerId),
       expiresAtIdx: index("duels_expires_at_idx").on(table.expiresAt),
       createdAtIdx: index("duels_created_at_idx").on(table.createdAt),
+      gameIdIdx: index("duels_game_id_idx").on(table.gameId),
     };
   },
 );
 
-export const duelParticipants = pgTable(
-  "duel_participants",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    duelId: uuid("duel_id")
-      .notNull()
-      .references(() => duels.id, { onDelete: "cascade" }),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-  },
-  (table) => {
-    return {
-      duelIdIdx: index("duel_participants_duel_id_idx").on(table.duelId),
-      userIdIdx: index("duel_participants_user_id_idx").on(table.userId),
-      duelUserIdx: index("duel_participants_duel_user_idx").on(
-        table.duelId,
-        table.userId,
-      ),
-    };
-  },
-);
+
 
 export const matches = pgTable(
   "matches",
@@ -119,6 +112,8 @@ export const gameProfiles = pgTable(
       .references(() => games.id, { onDelete: "cascade" }),
     playerId: varchar("player_id").unique(),
     rank: varchar("rank"),
+    /** Game-specific stats (e.g. { kda: 2.4, level: 35, winRate: 0.62, totalMatches: 120 }) */
+    stats: jsonb("stats").$type<Record<string, unknown>>(),
   },
   (table) => {
     return {

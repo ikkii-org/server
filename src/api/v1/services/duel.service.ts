@@ -1,5 +1,5 @@
 import { db } from "../../../db";
-import { duels, users, games } from "../../../db/schema";
+import { duels, users, games, gameProfiles } from "../../../db/schema";
 import { eq, and, lt, sql } from "drizzle-orm";
 import type { DuelStatus } from "../types/duel.types";
 import type { Duel, DuelSubmitResult } from "../models/duel.model";
@@ -33,6 +33,8 @@ function mapRow(row: DuelRow): Duel {
         player1SubmittedWinner: row.player1SubmittedWinner ?? null,
         player2SubmittedWinner: row.player2SubmittedWinner ?? null,
         gameId: row.gameId ?? null,
+        player1GameProfileId: row.player1GameProfileId ?? null,
+        player2GameProfileId: row.player2GameProfileId ?? null,
         txSignature: row.txSignature ?? null,
         expiresAt: row.expiresAt,
         createdAt: row.createdAt,
@@ -72,6 +74,23 @@ export async function createDuel(
 
     const player1 = await requireUser(player1Username);
 
+    // Look up the player's game profile if a gameId is provided
+    let player1GameProfileId: string | null = null;
+    if (gameId) {
+        const [profile] = await db
+            .select()
+            .from(gameProfiles)
+            .where(
+                and(
+                    eq(gameProfiles.userId, player1.id),
+                    eq(gameProfiles.gameId, gameId),
+                ),
+            );
+        if (profile) {
+            player1GameProfileId = profile.id;
+        }
+    }
+
     const [duel] = await db
         .insert(duels)
         .values({
@@ -83,6 +102,7 @@ export async function createDuel(
             tokenMint,
             status: "OPEN",
             gameId: gameId ?? null,
+            player1GameProfileId,
             expiresAt: new Date(Date.now() + expiresInMs),
         })
         .returning();
@@ -107,11 +127,29 @@ export async function joinDuel(duelId: string, player2Username: string): Promise
 
     const player2 = await requireUser(player2Username);
 
+    // Look up player 2's game profile if the duel has a gameId
+    let player2GameProfileId: string | null = null;
+    if (duel.gameId) {
+        const [profile] = await db
+            .select()
+            .from(gameProfiles)
+            .where(
+                and(
+                    eq(gameProfiles.userId, player2.id),
+                    eq(gameProfiles.gameId, duel.gameId),
+                ),
+            );
+        if (profile) {
+            player2GameProfileId = profile.id;
+        }
+    }
+
     const [updated] = await db
         .update(duels)
         .set({
             player2Id: player2.id,
             player2Username: player2.username,
+            player2GameProfileId,
             status: "ACTIVE",
         })
         .where(eq(duels.id, duelId))
