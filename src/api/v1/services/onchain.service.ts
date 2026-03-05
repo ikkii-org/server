@@ -18,6 +18,10 @@ import {
     programId,
 } from "../../../config/solana";
 import bs58 from "bs58";
+import { db } from "../../../db";
+import { gameProfiles, users } from "../../../db/schema";
+import { eq } from "drizzle-orm";
+import { verifyMatchBetweenPlayers } from "./clash-royale.service";
 
 // ── UUID → Buffer ────────────────────────────────────────────────────────────
 
@@ -211,30 +215,99 @@ export async function resolveDisputeOnChain(
  * Returns the winner's username, or null if the API is unavailable or
  * returns inconclusive data.
  *
- * The `apiUrl` should contain a `:matchId` placeholder that will be
- * replaced with the actual duel/match ID.
+ * Currently supports: Clash Royale
  */
 export async function verifyWinnerViaGameApi(
-    apiUrl: string,
+    apiBaseUrl: string,
+    apiKey: string,
+    gameName: string,
     duelId: string,
+    player1GameProfileId: string | null,
+    player2GameProfileId: string | null,
 ): Promise<string | null> {
     try {
-        const url = apiUrl.replace(":matchId", duelId);
-        const response = await fetch(url, {
-            method: "GET",
-            headers: { "Content-Type": "application/json" },
-            signal: AbortSignal.timeout(10_000), // 10s timeout
-        });
-
-        if (!response.ok) {
-            console.error(`Game API returned ${response.status} for duel ${duelId}`);
-            return null;
+        // Game-specific verification logic
+        if (gameName.toLowerCase() === "clash royale") {
+            return await verifyClashRoyaleMatch(
+                apiBaseUrl,
+                apiKey,
+                player1GameProfileId,
+                player2GameProfileId,
+            );
         }
 
-        const data = await response.json() as { winner?: string };
-        return data.winner ?? null;
+        // Fallback: generic API (expects { winner: "username" } response)
+        console.warn(`No specific integration for game: ${gameName}`);
+        return null;
     } catch (err) {
         console.error(`Game API verification failed for duel ${duelId}:`, err);
         return null;
     }
+}
+
+// ── Clash Royale Verification ────────────────────────────────────────────────
+
+/**
+ * Verify a Clash Royale match between two players.
+ * Looks up their player tags from gameProfiles and checks the battle log.
+ */
+async function verifyClashRoyaleMatch(
+    apiBaseUrl: string,
+    apiKey: string,
+    player1GameProfileId: string | null,
+    player2GameProfileId: string | null,
+): Promise<string | null> {
+    if (!player1GameProfileId || !player2GameProfileId) {
+        console.warn("Missing game profile IDs for Clash Royale verification");
+        return null;
+    }
+
+    // Get player tags from game profiles
+    const [profile1] = await db
+        .select()
+        .from(gameProfiles)
+        .where(eq(gameProfiles.id, player1GameProfileId));
+
+    const [profile2] = await db
+        .select()
+        .from(gameProfiles)
+        .where(eq(gameProfiles.id, player2GameProfileId));
+
+    if (!profile1?.playerId || !profile2?.playerId) {
+        console.warn("One or both players missing Clash Royale player tag");
+        return null;
+    }
+
+    // Call Clash Royale API to verify match
+    const result = await verifyMatchBetweenPlayers(
+        apiBaseUrl,
+        apiKey,
+        profile1.playerId, // player tag (e.g., "#ABC123")
+        profile2.playerId,
+        30, // within last 30 minutes
+    );
+
+    if (!result.verified || !result.winner) {
+        console.warn(`Clash Royale verification: ${result.reason}`);
+        return null;
+    }
+
+    // Map winner tag back to username
+    const winnerProfileId = result.winner === profile1.playerId
+        ? player1GameProfileId
+        : player2GameProfileId;
+
+    const [winnerProfile] = await db
+        .select({ userId: gameProfiles.userId })
+        .from(gameProfiles)
+        .where(eq(gameProfiles.id, winnerProfileId));
+
+    if (!winnerProfile) return null;
+
+    const [winner] = await db
+        .select({ username: users.username })
+        .from(users)
+        .where(eq(users.id, winnerProfile.userId));
+
+    return winner?.username ?? null;
 }

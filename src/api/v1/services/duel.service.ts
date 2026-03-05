@@ -291,8 +291,15 @@ export async function submitResult(
             if (disputed.gameId) {
                 try {
                     const [game] = await db.select().from(games).where(eq(games.id, disputed.gameId));
-                    if (game?.api) {
-                        const verifiedWinner = await verifyWinnerViaGameApi(game.api, duelId);
+                    if (game?.apiBaseUrl && game?.apiKey) {
+                        const verifiedWinner = await verifyWinnerViaGameApi(
+                            game.apiBaseUrl,
+                            game.apiKey,
+                            game.name,
+                            duelId,
+                            disputed.player1GameProfileId,
+                            disputed.player2GameProfileId,
+                        );
                         if (verifiedWinner) {
                             const verifiedUser = await requireUser(verifiedWinner);
 
