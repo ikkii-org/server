@@ -3,9 +3,19 @@ import {
     addClient,
     removeClient,
     subscribeClient,
+    unsubscribeClient,
     generateClientId,
 } from "../services/websocket.service";
 import { CHANNELS } from "../services/pubsub.service";
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+// Allowed channel patterns (prevent arbitrary subscriptions)
+const ALLOWED_CHANNEL_PATTERNS = [
+    /^duel:created$/,
+    /^duel:cancelled$/,
+    /^duel:[a-f0-9-]+:(joined|result|settled|disputed)$/,
+];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -18,8 +28,14 @@ interface WebSocketData {
 // ─── Message Types ────────────────────────────────────────────────────────────
 
 interface ClientMessage {
-    action: "subscribe" | "unsubscribe";
-    channel: string;
+    action: "subscribe" | "unsubscribe" | "ping";
+    channel?: string;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function isValidChannel(channel: string): boolean {
+    return ALLOWED_CHANNEL_PATTERNS.some(pattern => pattern.test(channel));
 }
 
 // ─── WebSocket Handlers ───────────────────────────────────────────────────────
@@ -29,7 +45,17 @@ export const websocketHandler = {
      * Called when a new WebSocket connection is opened
      */
     open(ws: ServerWebSocket<WebSocketData>) {
-        addClient(ws);
+        const accepted = addClient(ws);
+        
+        if (!accepted) {
+            ws.send(JSON.stringify({
+                type: "error",
+                data: { message: "Server at capacity" },
+                timestamp: Date.now(),
+            }));
+            ws.close(1013, "Server at capacity");
+            return;
+        }
         
         // Send welcome message
         ws.send(JSON.stringify({
@@ -52,6 +78,14 @@ export const websocketHandler = {
             
             switch (msg.action) {
                 case "subscribe":
+                    if (!msg.channel) {
+                        ws.send(JSON.stringify({ type: "error", data: { message: "Channel required" }, timestamp: Date.now() }));
+                        break;
+                    }
+                    if (!isValidChannel(msg.channel)) {
+                        ws.send(JSON.stringify({ type: "error", data: { message: "Invalid channel" }, timestamp: Date.now() }));
+                        break;
+                    }
                     subscribeClient(ws, msg.channel);
                     ws.send(JSON.stringify({
                         type: "subscribed",
@@ -61,12 +95,18 @@ export const websocketHandler = {
                     break;
                     
                 case "unsubscribe":
-                    // unsubscribeClient handled in websocket.service
+                    if (msg.channel) {
+                        unsubscribeClient(ws, msg.channel);
+                    }
                     ws.send(JSON.stringify({
                         type: "unsubscribed",
                         data: { channel: msg.channel },
                         timestamp: Date.now(),
                     }));
+                    break;
+                
+                case "ping":
+                    ws.send(JSON.stringify({ type: "pong", timestamp: Date.now() }));
                     break;
                     
                 default:

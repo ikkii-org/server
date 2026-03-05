@@ -1,6 +1,11 @@
 import type { ServerWebSocket } from "bun";
 import { subscribe, unsubscribe, CHANNELS, type PubSubEvent } from "./pubsub.service";
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const MAX_CONNECTIONS = 10000;
+const MAX_SUBSCRIPTIONS_PER_CLIENT = 50;
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface WebSocketData {
@@ -21,9 +26,16 @@ const channelSubscribers = new Map<string, Set<string>>();
 
 // ─── Client Management ────────────────────────────────────────────────────────
 
-export function addClient(ws: WSClient): void {
+export function addClient(ws: WSClient): boolean {
+    // Reject if at max capacity
+    if (clients.size >= MAX_CONNECTIONS) {
+        console.warn(`[WS] Connection rejected - max capacity (${MAX_CONNECTIONS})`);
+        return false;
+    }
+    
     clients.set(ws.data.id, ws);
-    console.log(`[WS] Client connected: ${ws.data.id}`);
+    console.log(`[WS] Client connected: ${ws.data.id} (total: ${clients.size})`);
+    return true;
 }
 
 export function removeClient(ws: WSClient): void {
@@ -37,7 +49,18 @@ export function removeClient(ws: WSClient): void {
 
 // ─── Channel Subscriptions ────────────────────────────────────────────────────
 
-export async function subscribeClient(ws: WSClient, channel: string): Promise<void> {
+export async function subscribeClient(ws: WSClient, channel: string): Promise<boolean> {
+    // Limit subscriptions per client
+    if (ws.data.subscribedChannels.size >= MAX_SUBSCRIPTIONS_PER_CLIENT) {
+        console.warn(`[WS] Client ${ws.data.id} hit subscription limit (${MAX_SUBSCRIPTIONS_PER_CLIENT})`);
+        return false;
+    }
+    
+    // Already subscribed
+    if (ws.data.subscribedChannels.has(channel)) {
+        return true;
+    }
+    
     // Add client to channel subscribers
     if (!channelSubscribers.has(channel)) {
         channelSubscribers.set(channel, new Set());
@@ -52,6 +75,7 @@ export async function subscribeClient(ws: WSClient, channel: string): Promise<vo
     ws.data.subscribedChannels.add(channel);
     
     console.log(`[WS] Client ${ws.data.id} subscribed to ${channel}`);
+    return true;
 }
 
 export function unsubscribeClient(ws: WSClient, channel: string): void {
