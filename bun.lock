@@ -14,6 +14,7 @@
         "@types/node": "^25.3.0",
         "drizzle-orm": "^0.45.1",
         "hono": "^4.12.0",
+        "ikki-escrow-sdk": "file:./ikki-escrow-sdk-1.0.0.tgz",
         "pg": "^8.18.0",
         "redis": "^5.11.0",
         "typescript": "^5.9.3",
@@ -353,6 +354,8 @@
 
     "ieee754": ["ieee754@1.2.1", "", {}, "sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA=="],
 
+    "ikki-escrow-sdk": ["ikki-escrow-sdk@./ikki-escrow-sdk-1.0.0.tgz", { "dependencies": { "@coral-xyz/anchor": "^0.31.1", "@solana/spl-token": "^0.4.6", "@solana/web3.js": "^1.95.0", "bn.js": "^5.2.1" } }],
+
     "import-in-the-middle": ["import-in-the-middle@2.0.6", "", { "dependencies": { "acorn": "^8.15.0", "acorn-import-attributes": "^1.9.5", "cjs-module-lexer": "^2.2.0", "module-details-from-path": "^1.0.4" } }, "sha512-3vZV3jX0XRFW3EJDTwzWoZa+RH1b8eTTx6YOCjglrLyPuepwoBti1k3L2dKwdCUrnVEfc5CuRuGstaC/uQJJaw=="],
 
     "isomorphic-ws": ["isomorphic-ws@4.0.1", "", { "peerDependencies": { "ws": "*" } }, "sha512-BhBvN2MBpWTaSHdWRb/bwdZJ1WaehQ2L1KngkCkfLUGF0mAWAT1sQUQacEmQ0jXkFw/czDXPNQSL5u2/Krsz1w=="],
@@ -482,6 +485,8 @@
     "@solana/options/@solana/errors": ["@solana/errors@2.0.0-rc.1", "", { "dependencies": { "chalk": "^5.3.0", "commander": "^12.1.0" }, "peerDependencies": { "typescript": ">=5" }, "bin": { "errors": "bin/cli.mjs" } }, "sha512-ejNvQ2oJ7+bcFAYWj225lyRkHnixuAeb7RQCixm+5mH4n1IA4Qya/9Bmfy5RAAHQzxK43clu3kZmL5eF9VGtYQ=="],
 
     "@solana/web3.js/superstruct": ["superstruct@2.0.2", "", {}, "sha512-uV+TFRZdXsqXTL2pRvujROjdZQ4RAlBUS5BTh9IGm+jTqQntYThciG/qu57Gs69yjnVUSqdxF9YLmSnpupBW9A=="],
+
+    "ikki-escrow-sdk/@coral-xyz/anchor": ["@coral-xyz/anchor@0.31.1", "", { "dependencies": { "@coral-xyz/anchor-errors": "^0.31.1", "@coral-xyz/borsh": "^0.31.1", "@noble/hashes": "^1.3.1", "@solana/web3.js": "^1.69.0", "bn.js": "^5.1.2", "bs58": "^4.0.1", "buffer-layout": "^1.2.2", "camelcase": "^6.3.0", "cross-fetch": "^3.1.5", "eventemitter3": "^4.0.7", "pako": "^2.0.3", "superstruct": "^0.15.4", "toml": "^3.0.0" } }, "sha512-QUqpoEK+gi2S6nlYc2atgT2r41TT3caWr/cPUEL8n8Md9437trZ68STknq897b82p5mW0XrTBNOzRbmIRJtfsA=="],
 
     "jayson/@types/node": ["@types/node@12.20.55", "", {}, "sha512-J8xLz7q2OFulZ2cyGTLE1TbbZcjpno7FaN6zdJNrgAdrJ+DZzh/uFR6YrTb4C+nXakvud8Q4+rbhoIWlYQbUFQ=="],
 

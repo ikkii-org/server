@@ -9,6 +9,8 @@ import {
     disputeOnChain,
     resolveDisputeOnChain,
     verifyWinnerViaGameApi,
+    verifyCreateEscrowTx,
+    verifyJoinEscrowTx,
 } from "./onchain.service";
 
 export type { Duel, DuelSubmitResult };
@@ -66,11 +68,21 @@ export async function createDuel(
     stakeAmount: number,
     tokenMint: string,
     gameId?: string,
-    expiresInMs: number = 30 * 60 * 1000
+    expiresInMs: number = 30 * 60 * 1000,
+    txSignature?: string,
+    duelId?: string,
 ): Promise<Duel> {
     if (!player1Username) throw new Error("Player username is required");
     if (stakeAmount <= 0) throw new Error("Stake amount must be greater than 0");
     if (!tokenMint) throw new Error("Token mint is required");
+    if (!txSignature) throw new Error("Transaction signature is required for on-chain verification");
+    if (!duelId) throw new Error("Duel ID is required from the frontend");
+
+    // 1. Verify the Escrow Creation transaction on-chain
+    const isValidTx = await verifyCreateEscrowTx(txSignature, duelId, stakeAmount);
+    if (!isValidTx) {
+        throw new Error("Invalid or unverified transaction signature");
+    }
 
     const player1 = await requireUser(player1Username);
 
@@ -94,6 +106,7 @@ export async function createDuel(
     const [duel] = await db
         .insert(duels)
         .values({
+            id: duelId,
             player1Id: player1.id,
             player1Username: player1.username,
             player2Id: null,
@@ -101,6 +114,7 @@ export async function createDuel(
             stakeAmount,
             tokenMint,
             status: "OPEN",
+            txSignature,
             gameId: gameId ?? null,
             player1GameProfileId,
             expiresAt: new Date(Date.now() + expiresInMs),
@@ -118,12 +132,23 @@ export async function createDuel(
 /**
  * Join an existing open duel as player 2.
  */
-export async function joinDuel(duelId: string, player2Username: string): Promise<Duel> {
+export async function joinDuel(
+    duelId: string,
+    player2Username: string,
+    txSignature?: string
+): Promise<Duel> {
     const [duel] = await db.select().from(duels).where(eq(duels.id, duelId));
     if (!duel) throw new Error("Duel not found");
     if (duel.status !== "OPEN") throw new Error("Duel is not open for joining");
     if (duel.player1Username === player2Username) throw new Error("Player cannot join their own duel");
     if (duel.expiresAt < new Date()) throw new Error("Duel has expired");
+    if (!txSignature) throw new Error("Transaction signature is required for on-chain verification");
+
+    // 1. Verify the Join Escrow transaction on-chain
+    const isValidTx = await verifyJoinEscrowTx(txSignature);
+    if (!isValidTx) {
+        throw new Error("Invalid or unverified transaction signature");
+    }
 
     const player2 = await requireUser(player2Username);
 

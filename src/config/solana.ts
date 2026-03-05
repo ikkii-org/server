@@ -38,7 +38,7 @@ export const anchorProvider = new AnchorProvider(solanaConnection, wallet, {
 
 // ── Program & SDK ────────────────────────────────────────────────────────────
 
-const programId = new PublicKey(env.ESCROW_PROGRAM_ID);
+export const programId = new PublicKey(env.ESCROW_PROGRAM_ID);
 export const escrowProgram = new Program<IkkiEscrow>(idl as any, anchorProvider);
 
 // NOTE: The `as any` casts below work around a dual-package Anchor type conflict.

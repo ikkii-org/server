@@ -6,7 +6,8 @@ WORKDIR /app
 # Install dependencies
 FROM base AS deps
 COPY package.json bun.lockb* ./
-RUN bun install --frozen-lockfile
+COPY ikki-escrow-sdk-1.0.0.tgz ./
+RUN bun install
 
 # Development
 FROM base AS dev

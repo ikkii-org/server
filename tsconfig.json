@@ -12,16 +12,9 @@
     ],
     "outDir": "dist",
     "baseUrl": ".",
-    "paths": {
-      "ikki-escrow/*": [
-        "../escrow/*"
-      ]
-    },
     "resolveJsonModule": true
   },
   "include": [
-    "src/**/*",
-    "../escrow/target/types/**/*.ts",
-    "../escrow/sdk/src/**/*.ts"
+    "src/**/*"
   ]
 }
