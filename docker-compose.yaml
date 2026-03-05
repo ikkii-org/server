@@ -41,8 +41,8 @@ services:
 
   redis:
     image: redis:7-alpine
-    expose:
-      - "6379"
+    ports:
+      - "6379:6379"
     # Hybrid eviction: TTL expires normally, LRU kicks in under memory pressure
     command: >
       redis-server
