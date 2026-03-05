@@ -35,4 +35,8 @@ export const env = {
     TREASURY_PUBKEY: requireEnv("TREASURY_PUBKEY"),
     /** SPL token mint address for duels (e.g. devnet USDC) */
     TOKEN_MINT: requireEnv("TOKEN_MINT"),
+
+    // ── Game Integrations ───────────────────────────────────────────────────
+    /** Clash Royale Bearer JWT token from developer.clashroyale.com */
+    CLASH_ROYALE_TOKEN: process.env.CLASH_ROYALE_TOKEN ?? "",
 } as const;

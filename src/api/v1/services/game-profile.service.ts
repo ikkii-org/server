@@ -8,6 +8,7 @@ import { db } from "../../../db";
 import { games, gameProfiles, users } from "../../../db/schema";
 import { eq, and } from "drizzle-orm";
 import { getPlayer as getClashRoyalePlayer } from "./clash-royale.service";
+import { env } from "../../../config/env";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -144,7 +145,7 @@ export async function syncGameProfile(
     return { success: false, profile: null, error: "Player ID not set" };
   }
 
-  if (!game.apiBaseUrl || !game.apiKey) {
+  if (!game.apiBaseUrl) {
     return { success: false, profile: null, error: "Game API not configured" };
   }
 
@@ -162,9 +163,13 @@ async function syncClashRoyaleProfile(
   profile: typeof gameProfiles.$inferSelect,
   game: typeof games.$inferSelect
 ): Promise<SyncResult> {
+  if (!env.CLASH_ROYALE_TOKEN) {
+    return { success: false, profile: null, error: "Clash Royale token not configured" };
+  }
+
   const playerData = await getClashRoyalePlayer(
     game.apiBaseUrl!,
-    game.apiKey!,
+    env.CLASH_ROYALE_TOKEN,
     profile.playerId!
   );
 

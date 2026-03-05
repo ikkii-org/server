@@ -4,6 +4,7 @@ import { eq, and, lt, sql } from "drizzle-orm";
 import type { DuelStatus } from "../types/duel.types";
 import type { Duel, DuelSubmitResult } from "../models/duel.model";
 import { publish, CHANNELS } from "../../../services/pubsub.service";
+import { env } from "../../../config/env";
 import {
     settleOnChain,
     disputeOnChain,
@@ -51,6 +52,20 @@ async function requireUser(username: string) {
 
     if (!user) throw new Error(`User '${username}' not found`);
     return user;
+}
+
+/**
+ * Get API key for a game from environment variables.
+ */
+function getApiKeyForGame(gameName: string | undefined): string | null {
+    if (!gameName) return null;
+    
+    switch (gameName.toLowerCase()) {
+        case "clash royale":
+            return env.CLASH_ROYALE_TOKEN || null;
+        default:
+            return null;
+    }
 }
 
 // ─── Service functions ────────────────────────────────────────────────────────
@@ -291,10 +306,11 @@ export async function submitResult(
             if (disputed.gameId) {
                 try {
                     const [game] = await db.select().from(games).where(eq(games.id, disputed.gameId));
-                    if (game?.apiBaseUrl && game?.apiKey) {
+                    const apiKey = getApiKeyForGame(game?.name);
+                    if (game?.apiBaseUrl && apiKey) {
                         const verifiedWinner = await verifyWinnerViaGameApi(
                             game.apiBaseUrl,
-                            game.apiKey,
+                            apiKey,
                             game.name,
                             duelId,
                             disputed.player1GameProfileId,
