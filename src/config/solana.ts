@@ -9,20 +9,18 @@ import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
 import { env } from "./env";
 
-// Import the generated IDL — Anchor writes this after `anchor build`
-import idl from "../../../escrow/target/idl/ikki_escrow.json";
+// Import the generated IDL — copied from escrow/target/idl/ after `anchor build`
+import idl from "./ikki_escrow.json";
 
-// Import the generated type for the program
-import type { IkkiEscrow } from "../../../escrow/target/types/ikki_escrow";
-
-// Import SDK helpers from the escrow workspace
+// Import SDK + types from the published package
+import type { IkkiEscrow } from "ikki-escrow-sdk";
 import {
     IkkiEscrowSDK,
     findPlatformConfigPDA,
     findEscrowPDA,
     findVaultPDA,
     uuidToBytes,
-} from "../../../escrow/sdk/src/sdk";
+} from "ikki-escrow-sdk";
 
 // ── Authority Keypair ────────────────────────────────────────────────────────
 
