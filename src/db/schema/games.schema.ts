@@ -15,8 +15,10 @@ export const games = pgTable("games", {
   name: varchar("name", { length: 255 }).notNull().unique(),
   /** URL to the game's logo/icon for display in duel listings */
   icon: varchar("icon", { length: 500 }),
-  /** External game API endpoint for match result verification (e.g. https://api.game.com/v1/matches/:matchId) */
-  api: varchar("api", { length: 500 }),
+  /** Base URL for the game's official API (e.g. https://api.clashroyale.com/v1) */
+  apiBaseUrl: varchar("api_base_url", { length: 255 }),
+  /** API key/token for authenticating with the game's API (store encrypted in production) */
+  apiKey: varchar("api_key", { length: 500 }),
 });
 
 export const duels = pgTable(
