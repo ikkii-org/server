@@ -7,6 +7,7 @@ import { duelRoutes } from "./routes/duel.routes";
 import { escrowRoutes } from "./routes/escrow.routes";
 import { leaderboardRoutes } from "./routes/leaderboard.routes";
 import { verificationRoutes } from "./routes/verification.routes";
+import { gameProfileRoutes } from "./routes/game-profile.routes";
 
 export const v1Router = new Hono();
 
@@ -20,9 +21,11 @@ v1Router.use("/duels/*", authMiddleware);
 v1Router.use("/escrow/*", authMiddleware);
 v1Router.use("/leaderboard/*", authMiddleware);
 v1Router.use("/verification/*", authMiddleware);
+v1Router.use("/game-profiles/*", authMiddleware);
 
 v1Router.route("/users", userRoutes);
 v1Router.route("/duels", duelRoutes);
 v1Router.route("/escrow", escrowRoutes);
 v1Router.route("/leaderboard", leaderboardRoutes);
 v1Router.route("/verification", verificationRoutes);
+v1Router.route("/game-profiles", gameProfileRoutes);
