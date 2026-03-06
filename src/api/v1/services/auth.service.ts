@@ -72,7 +72,9 @@ export async function signup(
     .insert(wallet)
     .values({
       userId: user.id,
-      token: walletKey,
+      // token stores the SPL token mint address the user's escrow wallet is denominated in.
+      // Use the platform's configured TOKEN_MINT (e.g. devnet USDC).
+      token: env.TOKEN_MINT,
       availableBalance: "0",
       lockedBalance: "0",
     })

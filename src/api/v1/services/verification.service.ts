@@ -1,7 +1,8 @@
 import { db } from "../../../db";
-import { duels, gameProfiles, matches } from "../../../db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { duels, gameProfiles, matches, users } from "../../../db/schema";
+import { eq, and, desc, gte } from "drizzle-orm";
 import { recordWin, recordLoss } from "./user.service";
+import { resolveDisputeOnChain } from "./onchain.service";
 import type { VerificationResult } from "../models/verification.model";
 
 export type { VerificationResult };
@@ -71,18 +72,19 @@ export async function verifyDisputedDuel(duelId: string): Promise<VerificationRe
         };
     }
 
-    // Fetch latest match record for each profile
+    // Fetch latest match record for each profile, only considering matches
+    // that occurred after the duel was created (prevents pre-duel match replay).
     const [match1] = await db
         .select()
         .from(matches)
-        .where(eq(matches.gameprofileId, profile1.id))
+        .where(and(eq(matches.gameprofileId, profile1.id), gte(matches.createdAt, duel.createdAt)))
         .orderBy(desc(matches.createdAt))
         .limit(1);
 
     const [match2] = await db
         .select()
         .from(matches)
-        .where(eq(matches.gameprofileId, profile2.id))
+        .where(and(eq(matches.gameprofileId, profile2.id), gte(matches.createdAt, duel.createdAt)))
         .orderBy(desc(matches.createdAt))
         .limit(1);
 
@@ -126,9 +128,31 @@ async function settleDispute(
     loserId: string,
     stakeAmount: number
 ): Promise<void> {
+    // Fetch the winner's wallet key and the duel's tokenMint for on-chain settlement
+    const [winner] = await db
+        .select({ walletKey: users.walletKey })
+        .from(users)
+        .where(eq(users.id, winnerId));
+
+    const [duel] = await db
+        .select({ tokenMint: duels.tokenMint })
+        .from(duels)
+        .where(eq(duels.id, duelId));
+
+    // Settle on-chain first — release escrow funds to the winner
+    let settleTxSig: string | null = null;
+    if (winner?.walletKey) {
+        try {
+            settleTxSig = await resolveDisputeOnChain(duelId, winner.walletKey, duel?.tokenMint);
+        } catch (err) {
+            console.error(`[settleDispute] On-chain resolve failed for duel ${duelId}:`, err);
+            // Do NOT propagate — still mark settled in DB so admin can manually recover
+        }
+    }
+
     await db
         .update(duels)
-        .set({ status: "SETTLED", winnerUsername, winnerId })
+        .set({ status: "SETTLED", winnerUsername, winnerId, txSignature: settleTxSig })
         .where(eq(duels.id, duelId));
 
     await recordWin(winnerId, stakeAmount);

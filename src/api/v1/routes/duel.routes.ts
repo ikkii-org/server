@@ -5,6 +5,7 @@ import {
     submitResultHandler,
     cancelDuelHandler,
     getDuelHandler,
+    getDuelsByStatusHandler,
     cleanUpExpiredDuelsHandler,
 } from "../controllers/duel.controller";
 import { adminMiddleware } from "../../../middleware/admin.middleware";
@@ -13,6 +14,9 @@ export const duelRoutes = new Hono();
 
 // POST /duels            — create a new duel
 duelRoutes.post("/", createDuelHandler);
+
+// GET  /duels?status=    — list duels by status
+duelRoutes.get("/", getDuelsByStatusHandler);
 
 // GET  /duels/:id        — fetch a duel by id
 duelRoutes.get("/:id", getDuelHandler);

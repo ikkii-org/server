@@ -90,15 +90,23 @@ export async function updatePlayerPfp(username: string, pfp: string): Promise<Us
         .returning();
 
     if (!player) throw new Error("Player not found");
+
+    // Invalidate the static cache so the new avatar is served immediately
+    await del(CACHE_KEYS.USER_STATIC(username));
+
     return player;
 }
 
 export async function recordWin(userId: string, stakeAmount: number): Promise<void> {
-    await db.update(users).set({ wins: sql`${users.wins} + 1`, updatedAt: new Date() }).where(eq(users.id, userId));
-    await db.update(portfolio).set({ totalStakeWon: sql`${portfolio.totalStakeWon} + ${stakeAmount}`, updatedAt: new Date() }).where(eq(portfolio.userId, userId));
+    await db.transaction(async (tx) => {
+        await tx.update(users).set({ wins: sql`${users.wins} + 1`, updatedAt: new Date() }).where(eq(users.id, userId));
+        await tx.update(portfolio).set({ totalStakeWon: sql`${portfolio.totalStakeWon} + ${stakeAmount}`, updatedAt: new Date() }).where(eq(portfolio.userId, userId));
+    });
 }
 
 export async function recordLoss(userId: string, stakeAmount: number): Promise<void> {
-    await db.update(users).set({ losses: sql`${users.losses} + 1`, updatedAt: new Date() }).where(eq(users.id, userId));
-    await db.update(portfolio).set({ totalStakeLost: sql`${portfolio.totalStakeLost} + ${stakeAmount}`, updatedAt: new Date() }).where(eq(portfolio.userId, userId));
+    await db.transaction(async (tx) => {
+        await tx.update(users).set({ losses: sql`${users.losses} + 1`, updatedAt: new Date() }).where(eq(users.id, userId));
+        await tx.update(portfolio).set({ totalStakeLost: sql`${portfolio.totalStakeLost} + ${stakeAmount}`, updatedAt: new Date() }).where(eq(portfolio.userId, userId));
+    });
 }

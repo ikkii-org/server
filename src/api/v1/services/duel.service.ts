@@ -1,6 +1,6 @@
 import { db } from "../../../db";
 import { duels, users, games, gameProfiles } from "../../../db/schema";
-import { eq, and, lt, sql } from "drizzle-orm";
+import { eq, and, lt, sql, desc } from "drizzle-orm";
 import type { DuelStatus } from "../types/duel.types";
 import type { Duel, DuelSubmitResult } from "../models/duel.model";
 import { publish, CHANNELS } from "../../../services/pubsub.service";
@@ -12,6 +12,7 @@ import {
     verifyWinnerViaGameApi,
     verifyCreateEscrowTx,
     verifyJoinEscrowTx,
+    verifyCancelEscrowTx,
 } from "./onchain.service";
 
 export type { Duel, DuelSubmitResult };
@@ -81,6 +82,7 @@ function getApiKeyForGame(gameName: string | undefined): string | null {
 export async function createDuel(
     player1Username: string,
     stakeAmount: number,
+    stakeAmountSmallest: number,
     tokenMint: string,
     gameId?: string,
     expiresInMs: number = 30 * 60 * 1000,
@@ -94,7 +96,7 @@ export async function createDuel(
     if (!duelId) throw new Error("Duel ID is required from the frontend");
 
     // 1. Verify the Escrow Creation transaction on-chain
-    const isValidTx = await verifyCreateEscrowTx(txSignature, duelId, stakeAmount);
+    const isValidTx = await verifyCreateEscrowTx(txSignature, duelId, stakeAmountSmallest);
     if (!isValidTx) {
         throw new Error("Invalid or unverified transaction signature");
     }
@@ -159,8 +161,8 @@ export async function joinDuel(
     if (duel.expiresAt < new Date()) throw new Error("Duel has expired");
     if (!txSignature) throw new Error("Transaction signature is required for on-chain verification");
 
-    // 1. Verify the Join Escrow transaction on-chain
-    const isValidTx = await verifyJoinEscrowTx(txSignature);
+    // 1. Verify the Join Escrow transaction on-chain (with PDA check)
+    const isValidTx = await verifyJoinEscrowTx(txSignature, duelId);
     if (!isValidTx) {
         throw new Error("Invalid or unverified transaction signature");
     }
@@ -256,10 +258,18 @@ export async function submitResult(
             // On-chain settlement (authority signs)
             let txSignature: string | null = null;
             try {
-                txSignature = await settleOnChain(duelId, winner.walletKey);
+                txSignature = await settleOnChain(duelId, winner.walletKey, updated.tokenMint);
             } catch (err) {
                 console.error(`On-chain settle failed for duel ${duelId}:`, err);
-                throw new Error("On-chain settlement failed. Duel remains ACTIVE.");
+                // Mark as DISPUTED so the admin dispute-resolution path can recover funds.
+                // Both players agreed, so this is a technical failure, not a real dispute.
+                const [failedRow] = await db
+                    .update(duels)
+                    .set({ status: "DISPUTED" })
+                    .where(eq(duels.id, duelId))
+                    .returning();
+                await publish(CHANNELS.DUEL_DISPUTED(duelId), "DUEL_DISPUTED", mapRow(failedRow));
+                throw new Error("On-chain settlement failed — duel moved to DISPUTED for admin recovery.");
             }
 
             const settled = await db.transaction(async (tx) => {
@@ -319,7 +329,7 @@ export async function submitResult(
                         if (verifiedWinner) {
                             const verifiedUser = await requireUser(verifiedWinner);
 
-                            const resolveTxSig = await resolveDisputeOnChain(duelId, verifiedUser.walletKey);
+                            const resolveTxSig = await resolveDisputeOnChain(duelId, verifiedUser.walletKey, disputed.tokenMint);
 
                             const loserUsername =
                                 verifiedWinner === disputed.player1Username
@@ -367,16 +377,23 @@ export async function submitResult(
 /**
  * Cancel an open duel (only by creator, only if player 2 hasn't joined).
  */
-export async function cancelDuel(duelId: string, username: string): Promise<Duel> {
+export async function cancelDuel(duelId: string, username: string, txSignature?: string): Promise<Duel> {
     const [duel] = await db.select().from(duels).where(eq(duels.id, duelId));
     if (!duel) throw new Error("Duel not found");
     if (duel.status !== "OPEN") throw new Error("Only open duels can be cancelled");
     if (username !== duel.player1Username) throw new Error("Only the creator can cancel the duel");
     if (duel.player2Username !== null) throw new Error("Cannot cancel duel after another player has joined");
+    if (!txSignature) throw new Error("Transaction signature is required for on-chain verification");
+
+    // Verify the cancel transaction on-chain
+    const isValidTx = await verifyCancelEscrowTx(txSignature);
+    if (!isValidTx) {
+        throw new Error("Invalid or unverified cancel transaction signature");
+    }
 
     const [cancelled] = await db
         .update(duels)
-        .set({ status: "CANCELLED" })
+        .set({ status: "CANCELLED", txSignature })
         .where(eq(duels.id, duelId))
         .returning();
 
@@ -395,6 +412,18 @@ export async function getDuel(duelId: string): Promise<Duel> {
     const [duel] = await db.select().from(duels).where(eq(duels.id, duelId));
     if (!duel) throw new Error("Duel not found");
     return mapRow(duel);
+}
+
+/**
+ * Get all duels filtered by status, newest first.
+ */
+export async function getDuelsByStatus(status: DuelStatus): Promise<Duel[]> {
+    const rows = await db
+        .select()
+        .from(duels)
+        .where(eq(duels.status, status))
+        .orderBy(desc(duels.createdAt));
+    return rows.map(mapRow);
 }
 
 /**

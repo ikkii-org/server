@@ -5,9 +5,13 @@ import {
     submitResult,
     cancelDuel,
     getDuel,
+    getDuelsByStatus,
     cleanUpExpiredDuels,
 } from "../services/duel.service";
-import { createDuelSchema, joinDuelSchema, submitResultSchema, duelIdSchema } from "../validators/duel.validators";
+import { createDuelSchema, joinDuelSchema, submitResultSchema, cancelDuelSchema, duelIdSchema } from "../validators/duel.validators";
+import type { DuelStatus } from "../types/duel.types";
+
+const VALID_STATUSES: DuelStatus[] = ["OPEN", "ACTIVE", "DISPUTED", "SETTLED", "CANCELLED"];
 
 export async function createDuelHandler(c: Context) {
     try {
@@ -19,8 +23,8 @@ export async function createDuelHandler(c: Context) {
             return c.json({ error: result.error.issues[0].message }, 400);
         }
 
-        const { stakeAmount, tokenMint, gameId, expiresInMs, txSignature, duelId } = result.data;
-        const duel = await createDuel(username, stakeAmount, tokenMint, gameId, expiresInMs, txSignature, duelId);
+        const { stakeAmount, stakeAmountSmallest, tokenMint, gameId, expiresInMs, txSignature, duelId } = result.data;
+        const duel = await createDuel(username, stakeAmount, stakeAmountSmallest, tokenMint, gameId, expiresInMs, txSignature, duelId);
         return c.json({ duel }, 201);
     } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to create duel";
@@ -81,11 +85,31 @@ export async function cancelDuelHandler(c: Context) {
         }
 
         const username = c.get("username") as string;
-        const duel = await cancelDuel(duelIdResult.data, username);
+        const body = await c.req.json();
+        const result = cancelDuelSchema.safeParse(body);
+        if (!result.success) {
+            return c.json({ error: result.error.issues[0].message }, 400);
+        }
+
+        const duel = await cancelDuel(duelIdResult.data, username, result.data.txSignature);
         return c.json({ duel }, 200);
     } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to cancel duel";
         return c.json({ error: message }, 400);
+    }
+}
+
+export async function getDuelsByStatusHandler(c: Context) {
+    try {
+        const status = c.req.query("status") as DuelStatus | undefined;
+        if (!status || !VALID_STATUSES.includes(status)) {
+            return c.json({ error: `Invalid or missing status. Must be one of: ${VALID_STATUSES.join(", ")}` }, 400);
+        }
+        const duels = await getDuelsByStatus(status);
+        return c.json({ duels }, 200);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to fetch duels";
+        return c.json({ error: message }, 500);
     }
 }
 

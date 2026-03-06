@@ -11,6 +11,7 @@ export const duelIdSchema = z
 
 export const createDuelSchema = z.object({
     stakeAmount: z.number().positive("Stake amount must be positive"),
+    stakeAmountSmallest: z.number().int().positive("stakeAmountSmallest must be a positive integer (smallest token unit)"),
     tokenMint: solanaAddressSchema,
     gameId: z.string().uuid().optional(),
     expiresInMs: z.number().positive().optional(),
@@ -19,6 +20,10 @@ export const createDuelSchema = z.object({
 });
 
 export const joinDuelSchema = z.object({
+    txSignature: z.string().min(1, "Transaction signature is required"),
+});
+
+export const cancelDuelSchema = z.object({
     txSignature: z.string().min(1, "Transaction signature is required"),
 });
 
