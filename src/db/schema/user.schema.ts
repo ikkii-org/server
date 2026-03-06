@@ -1,6 +1,7 @@
 import {
   pgTable,
   varchar,
+  text,
   timestamp,
   integer,
   real,
@@ -11,7 +12,7 @@ export const users = pgTable("users", {
   id: uuid("user_id").defaultRandom().primaryKey(),
   username: varchar("username", { length: 255 }).notNull().unique(),
   walletKey: varchar("wallet_key", { length: 255 }).notNull().unique(),
-  pfp: varchar("pfp", { length: 500 }),
+  pfp: text("pfp"),
   wins: integer("wins").notNull().default(0),
   losses: integer("losses").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),

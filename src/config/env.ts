@@ -38,5 +38,5 @@ export const env = {
 
     // ── Game Integrations ───────────────────────────────────────────────────
     /** Clash Royale Bearer JWT token from developer.clashroyale.com */
-    CLASH_ROYALE_TOKEN: process.env.CLASH_ROYALE_TOKEN ?? "",
+    CLASH_ROYALE_TOKEN: requireEnv("CLASH_ROYALE_TOKEN")
 } as const;

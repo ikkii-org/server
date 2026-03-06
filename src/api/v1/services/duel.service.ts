@@ -69,6 +69,19 @@ function getApiKeyForGame(gameName: string | undefined): string | null {
     }
 }
 
+/**
+ * Extract the Anchor program error code from an error object, if present.
+ * Returns the numeric code (e.g. 6001) or null.
+ */
+function extractAnchorCode(err: unknown): number | null {
+    if (!err || typeof err !== "object") return null;
+    const a = err as any;
+    if (a?.error?.errorCode?.number != null) return a.error.errorCode.number;
+    const msg = a?.message ?? a?.toString?.() ?? "";
+    const m = msg.match(/custom program error:\s*0x([0-9a-fA-F]+)/);
+    return m ? parseInt(m[1], 16) : null;
+}
+
 // ─── Service functions ────────────────────────────────────────────────────────
 
 /**
@@ -181,9 +194,15 @@ export async function joinDuel(
                     eq(gameProfiles.gameId, duel.gameId),
                 ),
             );
-        if (profile) {
-            player2GameProfileId = profile.id;
+        if (!profile) {
+            // Fetch the game name for a friendlier error message
+            const [game] = await db.select().from(games).where(eq(games.id, duel.gameId));
+            const gameName = game?.name ?? "the required game";
+            throw new Error(
+                `You must link your ${gameName} account before joining this duel. Go to Profile → Game Accounts to link it.`
+            );
         }
+        player2GameProfileId = profile.id;
     }
 
     const [updated] = await db
@@ -245,6 +264,7 @@ export async function submitResult(
 
     // Both players submitted — resolve
     if (updated.player1SubmittedWinner && updated.player2SubmittedWinner) {
+        console.log(`[submitResult] Duel ${duelId}: p1 submitted="${updated.player1SubmittedWinner}", p2 submitted="${updated.player2SubmittedWinner}"`);
         if (updated.player1SubmittedWinner === updated.player2SubmittedWinner) {
             // Consensus → settle on-chain first, then update DB
             const winnerUsername = updated.player1SubmittedWinner;
@@ -255,13 +275,36 @@ export async function submitResult(
                     : updated.player1Username;
             const loser = await requireUser(loserUsername);
 
-            // On-chain settlement (authority signs)
+            // On-chain settlement (authority signs) — retry up to 3 times for transient errors.
+            // Deterministic Anchor errors (InvalidStatus, InvalidWinner, MintMismatch, etc.) are NOT retried.
+            const NON_RETRYABLE_CODES = new Set([6000, 6001, 6002, 6005, 6006, 6007, 6008, 6010]);
             let txSignature: string | null = null;
-            try {
-                txSignature = await settleOnChain(duelId, winner.walletKey, updated.tokenMint);
-            } catch (err) {
-                console.error(`On-chain settle failed for duel ${duelId}:`, err);
-                // Mark as DISPUTED so the admin dispute-resolution path can recover funds.
+            let settleError: unknown = null;
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    txSignature = await settleOnChain(duelId, winner.walletKey, updated.tokenMint);
+                    settleError = null;
+                    break;
+                } catch (err) {
+                    settleError = err;
+                    console.error(`[submitResult] On-chain settle attempt ${attempt}/3 failed for duel ${duelId}:`, err);
+
+                    // Check if this is a deterministic program error — no point retrying
+                    const anchorCode = extractAnchorCode(err);
+                    if (anchorCode !== null && NON_RETRYABLE_CODES.has(anchorCode)) {
+                        console.error(`[submitResult] Non-retryable Anchor error ${anchorCode} — aborting retries`);
+                        break;
+                    }
+
+                    if (attempt < 3) {
+                        // Wait before retrying (500ms, then 1500ms)
+                        await new Promise((r) => setTimeout(r, attempt * 500));
+                    }
+                }
+            }
+
+            if (settleError) {
+                // All retries exhausted — mark as DISPUTED so the admin dispute-resolution path can recover funds.
                 // Both players agreed, so this is a technical failure, not a real dispute.
                 const [failedRow] = await db
                     .update(duels)
@@ -269,7 +312,10 @@ export async function submitResult(
                     .where(eq(duels.id, duelId))
                     .returning();
                 await publish(CHANNELS.DUEL_DISPUTED(duelId), "DUEL_DISPUTED", mapRow(failedRow));
-                throw new Error("On-chain settlement failed — duel moved to DISPUTED for admin recovery.");
+                throw new Error(
+                    "Both players agreed on the winner, but the on-chain settlement failed after 3 attempts. " +
+                    "The duel has been marked as DISPUTED for admin recovery. Your funds are safe in the escrow."
+                );
             }
 
             const settled = await db.transaction(async (tx) => {

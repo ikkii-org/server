@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "bun --watch src/server.ts",
     "start": "bun src/server.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "db:seed": "bun src/db/seed-games.ts"
   },
   "keywords": [],
   "author": "",

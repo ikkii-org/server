@@ -3,7 +3,6 @@ import {
   varchar,
   uuid,
   timestamp,
-  boolean,
   real,
   index,
   jsonb,
@@ -75,31 +74,6 @@ export const duels = pgTable(
   },
 );
 
-
-
-export const matches = pgTable(
-  "matches",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    gameprofileId: uuid("game_profile_id")
-      .notNull()
-      .references(() => gameProfiles.id, { onDelete: "cascade" }),
-    mvp: boolean("mvp").notNull().default(false),
-    won: boolean("won").notNull().default(false),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-  },
-  (table) => {
-    return {
-      gameprofileIdIdx: index("matches_game_profile_id_idx").on(
-        table.gameprofileId,
-      ),
-      wonIdx: index("matches_won_idx").on(table.won),
-      mvpIdx: index("matches_mvp_idx").on(table.mvp),
-      createdAtIdx: index("matches_created_at_idx").on(table.createdAt),
-    };
-  },
-);
-
 export const gameProfiles = pgTable(
   "game_profiles",
   {
@@ -128,4 +102,3 @@ export const gameProfiles = pgTable(
 );
 
 export type gameProfile = typeof gameProfiles.$inferSelect;
-export type match = typeof matches.$inferSelect;

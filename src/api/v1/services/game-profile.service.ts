@@ -43,6 +43,9 @@ async function getGameByName(gameName: string) {
 /**
  * Link a user's external game account (e.g., Clash Royale player tag).
  * Creates a new game profile or updates an existing one.
+ *
+ * For supported games (Clash Royale), validates the player tag against
+ * the game's API before saving — rejects invalid/non-existent tags.
  */
 export async function linkGameAccount(
   userId: string,
@@ -55,7 +58,18 @@ export async function linkGameAccount(
     return { success: false, profile: null, error: `Game '${gameName}' not found` };
   }
 
-  // 2. Check if profile already exists
+  // 2. Validate the player ID against the game's API
+  const validation = await validatePlayerId(gameName, playerId, game);
+  if (!validation.valid) {
+    return { success: false, profile: null, error: validation.error! };
+  }
+
+  // Use the canonical tag from the API (e.g. uppercased, with "#" prefix)
+  const canonicalPlayerId = validation.canonicalId ?? playerId;
+  const initialRank = validation.rank ?? null;
+  const initialStats = validation.stats ?? null;
+
+  // 3. Check if profile already exists
   const [existing] = await db
     .select()
     .from(gameProfiles)
@@ -67,10 +81,10 @@ export async function linkGameAccount(
     );
 
   if (existing) {
-    // Update playerId
+    // Update playerId + stats from the validation fetch
     const [updated] = await db
       .update(gameProfiles)
-      .set({ playerId })
+      .set({ playerId: canonicalPlayerId, rank: initialRank ?? existing.rank, stats: initialStats ?? existing.stats })
       .where(eq(gameProfiles.id, existing.id))
       .returning();
 
@@ -88,13 +102,15 @@ export async function linkGameAccount(
     };
   }
 
-  // 3. Create new profile
+  // 4. Create new profile with validated data
   const [created] = await db
     .insert(gameProfiles)
     .values({
       userId,
       gameId: game.id,
-      playerId,
+      playerId: canonicalPlayerId,
+      rank: initialRank,
+      stats: initialStats,
     })
     .returning();
 
@@ -108,6 +124,80 @@ export async function linkGameAccount(
       playerId: created.playerId,
       rank: created.rank,
       stats: created.stats,
+    },
+  };
+}
+
+// ─── Player ID Validation ─────────────────────────────────────────────────────
+
+interface ValidationResult {
+  valid: boolean;
+  error?: string;
+  /** Canonical player ID from the API (e.g. "#2YQ8JCRUG") */
+  canonicalId?: string;
+  /** Initial rank pulled during validation */
+  rank?: string;
+  /** Initial stats pulled during validation */
+  stats?: Record<string, unknown>;
+}
+
+/**
+ * Validate a player ID against the game's external API.
+ * Returns the canonical ID and initial stats on success.
+ */
+async function validatePlayerId(
+  gameName: string,
+  playerId: string,
+  game: typeof games.$inferSelect,
+): Promise<ValidationResult> {
+  if (gameName.toLowerCase() === "clash royale") {
+    return await validateClashRoyaleTag(playerId, game);
+  }
+
+  // Games without API validation — accept any player ID
+  return { valid: true };
+}
+
+/**
+ * Validate a Clash Royale player tag by fetching the player profile.
+ * Normalizes the tag (adds "#" prefix if missing, uppercases).
+ */
+async function validateClashRoyaleTag(
+  rawTag: string,
+  game: typeof games.$inferSelect,
+): Promise<ValidationResult> {
+  // Normalize: ensure "#" prefix, uppercase
+  let tag = rawTag.trim().toUpperCase();
+  if (!tag.startsWith("#")) {
+    tag = `#${tag}`;
+  }
+
+  if (!env.CLASH_ROYALE_TOKEN) {
+    return { valid: false, error: "Clash Royale API key not configured on server" };
+  }
+
+  if (!game.apiBaseUrl) {
+    return { valid: false, error: "Clash Royale API URL not configured" };
+  }
+
+  const player = await getClashRoyalePlayer(game.apiBaseUrl, env.CLASH_ROYALE_TOKEN, tag);
+
+  if (!player) {
+    return {
+      valid: false,
+      error: `Player tag "${tag}" not found on Clash Royale. Make sure you entered the correct tag (e.g. #2YQ8JCRUG).`,
+    };
+  }
+
+  return {
+    valid: true,
+    canonicalId: player.tag,
+    rank: player.arena.name,
+    stats: {
+      trophies: player.trophies,
+      bestTrophies: player.bestTrophies,
+      expLevel: player.expLevel,
+      clan: player.clan?.name ?? null,
     },
   };
 }

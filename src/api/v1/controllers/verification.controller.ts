@@ -6,8 +6,10 @@ export async function verifyDuelHandler(c: Context) {
         const duelId = c.req.param("id");
         const result = await verifyDisputedDuel(duelId);
 
-        const status = result.verified ? 200 : 422;
-        return c.json({ result }, status);
+        // Always return 200 — the `verified` boolean tells the client whether
+        // auto-resolution succeeded. Returning 422 for "not verified" caused
+        // the mobile apiFetch to throw and show a generic error toast.
+        return c.json({ result }, 200);
     } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to verify duel";
         return c.json({ error: message }, 500);

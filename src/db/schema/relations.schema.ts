@@ -1,16 +1,16 @@
 import { relations } from "drizzle-orm";
-import { gameProfiles, games, matches } from "./games.schema";
+import { gameProfiles, games } from "./games.schema";
 import { users } from "./user.schema";
 import { wallet } from "./wallet.schema";
 
-export const gameToMatches = relations(games, ({ many }) => ({
-  matches: many(matches),
+export const gameToProfiles = relations(games, ({ many }) => ({
+  profiles: many(gameProfiles),
 }));
 
-export const matchesToGame = relations(matches, ({ one }) => ({
-  game: one(gameProfiles, {
-    fields: [matches.gameprofileId],
-    references: [gameProfiles.id],
+export const profilesToGame = relations(gameProfiles, ({ one }) => ({
+  game: one(games, {
+    fields: [gameProfiles.gameId],
+    references: [games.id],
   }),
 }));
 

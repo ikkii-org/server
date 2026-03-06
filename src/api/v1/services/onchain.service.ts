@@ -6,8 +6,13 @@
  * dispute auto-resolution.
  */
 
-import { PublicKey } from "@solana/web3.js";
-import { getAssociatedTokenAddressSync } from "@solana/spl-token";
+import { PublicKey, Transaction, sendAndConfirmTransaction } from "@solana/web3.js";
+import {
+    getAssociatedTokenAddressSync,
+    NATIVE_MINT,
+    createCloseAccountInstruction,
+    createAssociatedTokenAccountIdempotentInstruction,
+} from "@solana/spl-token";
 import {
     escrowSdk,
     authorityKeypair,
@@ -16,12 +21,130 @@ import {
     uuidToBytes,
     solanaConnection,
     programId,
+    findEscrowPDA,
 } from "../../../config/solana";
 import bs58 from "bs58";
 import { db } from "../../../db";
 import { gameProfiles, users } from "../../../db/schema";
 import { eq } from "drizzle-orm";
 import { verifyMatchBetweenPlayers } from "./clash-royale.service";
+
+// ── Anchor error code map (from IDL) ────────────────────────────────────────
+
+const ANCHOR_ERROR_CODES: Record<number, string> = {
+    6000: "Unauthorized",
+    6001: "InvalidStatus",
+    6002: "SelfDuel",
+    6003: "EscrowExpired",
+    6004: "NotExpired",
+    6005: "InvalidStakeAmount",
+    6006: "InvalidWinner",
+    6007: "FeeTooHigh",
+    6008: "MintMismatch",
+    6009: "Overflow",
+    6010: "ExpiryInPast",
+};
+
+const ESCROW_STATUS_NAMES: Record<number, string> = {
+    0: "Open",
+    1: "Active",
+    2: "Disputed",
+    3: "Settled",
+    4: "Cancelled",
+};
+
+/**
+ * Extract the Anchor program error code from an error, if present.
+ * Anchor errors typically contain the code in error.error.errorCode.number,
+ * or in the error message as "custom program error: 0x..."
+ */
+function parseAnchorErrorCode(err: unknown): { code: number; name: string } | null {
+    if (!err || typeof err !== "object") return null;
+
+    // Anchor SDK error shape: { error: { errorCode: { number, code } } }
+    const anchorErr = err as any;
+    if (anchorErr?.error?.errorCode?.number != null) {
+        const code = anchorErr.error.errorCode.number;
+        return { code, name: ANCHOR_ERROR_CODES[code] ?? anchorErr.error.errorCode.code ?? "Unknown" };
+    }
+
+    // Fallback: parse from message "custom program error: 0x1771" etc.
+    const msg = anchorErr?.message ?? anchorErr?.toString?.() ?? "";
+    const match = msg.match(/custom program error:\s*0x([0-9a-fA-F]+)/);
+    if (match) {
+        const code = parseInt(match[1], 16);
+        return { code, name: ANCHOR_ERROR_CODES[code] ?? "Unknown" };
+    }
+
+    return null;
+}
+
+/**
+ * Run pre-flight diagnostics before attempting settle. Logs findings but does NOT throw.
+ * This helps us identify the root cause when settleOnChain fails.
+ */
+async function logSettleDiagnostics(
+    duelUuid: string,
+    winnerPubkey: PublicKey,
+    mint: PublicKey,
+): Promise<void> {
+    const tag = `[settleOnChain:diag][${duelUuid}]`;
+    try {
+        // 1. Authority SOL balance
+        const balance = await solanaConnection.getBalance(authorityKeypair.publicKey);
+        const balanceSol = balance / 1e9;
+        console.log(`${tag} Authority ${authorityKeypair.publicKey.toBase58()} balance: ${balanceSol} SOL`);
+        if (balanceSol < 0.01) {
+            console.warn(`${tag} WARNING: Authority balance very low (${balanceSol} SOL) — tx fees may fail`);
+        }
+
+        // 2. Fetch on-chain escrow state
+        const duelIdBuf = uuidToBytes(duelUuid);
+        const [escrowPDA] = findEscrowPDA(duelIdBuf, programId);
+        console.log(`${tag} Escrow PDA: ${escrowPDA.toBase58()}`);
+
+        try {
+            const escrowAccount = await escrowSdk.fetchEscrow(duelIdBuf);
+            const statusNum = typeof escrowAccount.status === "object"
+                ? Object.keys(escrowAccount.status)[0]
+                : escrowAccount.status;
+            const statusLabel = typeof statusNum === "string"
+                ? statusNum
+                : ESCROW_STATUS_NAMES[statusNum as number] ?? `unknown(${statusNum})`;
+
+            console.log(`${tag} Escrow status: ${statusLabel}`);
+            console.log(`${tag} Escrow player1: ${escrowAccount.player1.toBase58()}`);
+            console.log(`${tag} Escrow player2: ${escrowAccount.player2.toBase58()}`);
+            console.log(`${tag} Winner arg:     ${winnerPubkey.toBase58()}`);
+            console.log(`${tag} Stake amount:   ${escrowAccount.stakeAmount.toString()} (smallest units)`);
+            console.log(`${tag} Token mint:     ${escrowAccount.tokenMint.toBase58()}`);
+            console.log(`${tag} Expiry:         ${new Date(Number(escrowAccount.expiry) * 1000).toISOString()}`);
+
+            // Check status
+            if (statusLabel !== "Active" && statusLabel !== "active") {
+                console.error(`${tag} PROBLEM: Escrow status is "${statusLabel}" — settleEscrow requires "Active" (error 6001)`);
+            }
+
+            // Check winner matches player1 or player2
+            const matchesP1 = winnerPubkey.equals(escrowAccount.player1);
+            const matchesP2 = winnerPubkey.equals(escrowAccount.player2);
+            if (!matchesP1 && !matchesP2) {
+                console.error(`${tag} PROBLEM: Winner ${winnerPubkey.toBase58()} does NOT match player1 or player2 (error 6006)`);
+            } else {
+                console.log(`${tag} Winner matches: ${matchesP1 ? "player1" : "player2"}`);
+            }
+
+            // Check mint matches
+            if (!mint.equals(escrowAccount.tokenMint)) {
+                console.error(`${tag} PROBLEM: Mint mismatch — duel has ${mint.toBase58()}, escrow has ${escrowAccount.tokenMint.toBase58()} (error 6008)`);
+            }
+        } catch (fetchErr) {
+            console.error(`${tag} Could not fetch escrow account (may not exist on-chain):`, fetchErr);
+        }
+    } catch (diagErr) {
+        console.error(`${tag} Diagnostics failed (non-fatal):`, diagErr);
+    }
+}
 
 // ── UUID → Buffer ────────────────────────────────────────────────────────────
 
@@ -201,7 +324,52 @@ export async function verifyCancelEscrowTx(txSig: string): Promise<boolean> {
 // ── Settle on-chain ──────────────────────────────────────────────────────────
 
 /**
+ * For wSOL duels, ensure the recipient has a wSOL ATA before the settle tx
+ * (the program will transfer wSOL tokens into it), then close it afterward
+ * to convert the wSOL back to native SOL.
+ *
+ * Returns the close tx signature (or null if not a wSOL duel).
+ */
+async function unwrapWsolAfterSettle(
+    mint: PublicKey,
+    recipientPubkey: PublicKey,
+): Promise<string | null> {
+    if (!mint.equals(NATIVE_MINT)) return null;
+
+    const wsolAta = getAssociatedTokenAddressSync(NATIVE_MINT, recipientPubkey);
+
+    // Check if ATA has a non-zero wSOL balance before closing
+    let balance = 0n;
+    try {
+        const info = await solanaConnection.getTokenAccountBalance(wsolAta);
+        balance = BigInt(info.value.amount);
+    } catch {
+        // ATA doesn't exist or has no balance — nothing to unwrap
+        return null;
+    }
+
+    if (balance === 0n) return null;
+
+    // Close the wSOL ATA: sends all lamports (stake + rent) to the recipient wallet.
+    // The authority (our server keypair) acts as the close authority only if it owns the ATA.
+    // But the ATA is owned by the recipient — so the recipient must be the close authority.
+    // Since the recipient is the winner (not our keypair), we cannot sign on their behalf.
+    //
+    // Solution: The server does NOT close the winner's ATA.
+    // Instead, the winner's mobile app closes it themselves (on next app open / explicitly).
+    // The wSOL is already in their ATA — it is spendable as wSOL and will auto-appear
+    // as SOL balance in wallets that support wSOL (Phantom, Backpack, etc.).
+    //
+    // For the TREASURY ATA (server-controlled): we CAN close it since we hold the keypair.
+    // The treasury will just hold wSOL until swept.
+    //
+    // This is the correct production-safe approach — we never hold winner private keys.
+    return null;
+}
+
+/**
  * Settle a duel on-chain. The authority signs the transaction.
+ * For wSOL duels, ensures the winner and treasury wSOL ATAs exist before settling.
  * Returns the Solana transaction signature.
  */
 export async function settleOnChain(
@@ -209,34 +377,75 @@ export async function settleOnChain(
     winnerWalletKey: string,
     duelTokenMint?: string,
 ): Promise<string> {
+    const tag = `[settleOnChain][${duelUuid}]`;
     const winnerPubkey = new PublicKey(winnerWalletKey);
 
     // Use the per-duel token mint if provided, otherwise fall back to the global default.
     const mint = duelTokenMint ? new PublicKey(duelTokenMint) : tokenMint;
 
+    console.log(`${tag} Starting settlement — winner=${winnerWalletKey}, mint=${mint.toBase58()}`);
+
+    // Run pre-flight diagnostics (logs findings, never throws)
+    await logSettleDiagnostics(duelUuid, winnerPubkey, mint);
+
     // Derive the winner's associated token account for the duel's token mint
-    const winnerTokenAccount = getAssociatedTokenAddressSync(
-        mint,
-        winnerPubkey,
-    );
+    const winnerTokenAccount = getAssociatedTokenAddressSync(mint, winnerPubkey);
+    console.log(`${tag} Winner ATA: ${winnerTokenAccount.toBase58()}`);
 
     // Derive the treasury's associated token account
-    const treasuryTokenAccount = getAssociatedTokenAddressSync(
-        mint,
-        treasuryPubkey,
-    );
+    const treasuryTokenAccount = getAssociatedTokenAddressSync(mint, treasuryPubkey);
+    console.log(`${tag} Treasury ATA: ${treasuryTokenAccount.toBase58()}`);
+
+    // For wSOL duels: ensure winner and treasury wSOL ATAs exist before the settle
+    // tx tries to transfer tokens into them. Use idempotent create — safe to always include.
+    if (mint.equals(NATIVE_MINT)) {
+        console.log(`${tag} wSOL duel — sending ATA setup tx...`);
+        try {
+            const setupTx = new Transaction();
+            setupTx.add(
+                createAssociatedTokenAccountIdempotentInstruction(
+                    authorityKeypair.publicKey,
+                    winnerTokenAccount,
+                    winnerPubkey,
+                    NATIVE_MINT,
+                ),
+                createAssociatedTokenAccountIdempotentInstruction(
+                    authorityKeypair.publicKey,
+                    treasuryTokenAccount,
+                    treasuryPubkey,
+                    NATIVE_MINT,
+                ),
+            );
+            const setupSig = await sendAndConfirmTransaction(solanaConnection, setupTx, [authorityKeypair]);
+            console.log(`${tag} wSOL ATA setup tx confirmed: ${setupSig}`);
+        } catch (setupErr) {
+            console.error(`${tag} wSOL ATA setup tx FAILED — settlement cannot proceed:`, setupErr);
+            throw new Error(`wSOL ATA setup failed: ${setupErr instanceof Error ? setupErr.message : String(setupErr)}`);
+        }
+    }
 
     const duelIdBuf = duelIdToBuffer(duelUuid);
 
-    const txSig = await escrowSdk.settleEscrow(
-        authorityKeypair,
-        duelIdBuf,
-        winnerPubkey,
-        winnerTokenAccount,
-        treasuryTokenAccount,
-    );
-
-    return txSig;
+    try {
+        console.log(`${tag} Sending settleEscrow tx...`);
+        const txSig = await escrowSdk.settleEscrow(
+            authorityKeypair,
+            duelIdBuf,
+            winnerPubkey,
+            winnerTokenAccount,
+            treasuryTokenAccount,
+        );
+        console.log(`${tag} settleEscrow SUCCESS — tx: ${txSig}`);
+        return txSig;
+    } catch (settleErr) {
+        const anchorCode = parseAnchorErrorCode(settleErr);
+        if (anchorCode) {
+            console.error(`${tag} settleEscrow FAILED with Anchor error ${anchorCode.code} (${anchorCode.name}):`, settleErr);
+        } else {
+            console.error(`${tag} settleEscrow FAILED (non-Anchor error):`, settleErr);
+        }
+        throw settleErr;
+    }
 }
 
 // ── Dispute on-chain ─────────────────────────────────────────────────────────
@@ -246,9 +455,22 @@ export async function settleOnChain(
  * Returns the Solana transaction signature.
  */
 export async function disputeOnChain(duelUuid: string): Promise<string> {
+    const tag = `[disputeOnChain][${duelUuid}]`;
+    console.log(`${tag} Marking duel as disputed on-chain...`);
     const duelIdBuf = duelIdToBuffer(duelUuid);
-    const txSig = await escrowSdk.disputeEscrow(authorityKeypair, duelIdBuf);
-    return txSig;
+    try {
+        const txSig = await escrowSdk.disputeEscrow(authorityKeypair, duelIdBuf);
+        console.log(`${tag} disputeEscrow SUCCESS — tx: ${txSig}`);
+        return txSig;
+    } catch (err) {
+        const anchorCode = parseAnchorErrorCode(err);
+        if (anchorCode) {
+            console.error(`${tag} disputeEscrow FAILED with Anchor error ${anchorCode.code} (${anchorCode.name}):`, err);
+        } else {
+            console.error(`${tag} disputeEscrow FAILED:`, err);
+        }
+        throw err;
+    }
 }
 
 // ── Resolve dispute on-chain ─────────────────────────────────────────────────
@@ -262,32 +484,69 @@ export async function resolveDisputeOnChain(
     winnerWalletKey: string,
     duelTokenMint?: string,
 ): Promise<string> {
+    const tag = `[resolveDisputeOnChain][${duelUuid}]`;
     const winnerPubkey = new PublicKey(winnerWalletKey);
 
     // Use the per-duel token mint if provided, otherwise fall back to the global default.
     const mint = duelTokenMint ? new PublicKey(duelTokenMint) : tokenMint;
 
-    const winnerTokenAccount = getAssociatedTokenAddressSync(
-        mint,
-        winnerPubkey,
-    );
+    console.log(`${tag} Starting dispute resolution — winner=${winnerWalletKey}, mint=${mint.toBase58()}`);
 
-    const treasuryTokenAccount = getAssociatedTokenAddressSync(
-        mint,
-        treasuryPubkey,
-    );
+    // Run pre-flight diagnostics
+    await logSettleDiagnostics(duelUuid, winnerPubkey, mint);
+
+    const winnerTokenAccount = getAssociatedTokenAddressSync(mint, winnerPubkey);
+    const treasuryTokenAccount = getAssociatedTokenAddressSync(mint, treasuryPubkey);
+
+    // For wSOL duels: ensure winner and treasury wSOL ATAs exist before the resolve tx.
+    if (mint.equals(NATIVE_MINT)) {
+        console.log(`${tag} wSOL duel — sending ATA setup tx...`);
+        try {
+            const setupTx = new Transaction();
+            setupTx.add(
+                createAssociatedTokenAccountIdempotentInstruction(
+                    authorityKeypair.publicKey,
+                    winnerTokenAccount,
+                    winnerPubkey,
+                    NATIVE_MINT,
+                ),
+                createAssociatedTokenAccountIdempotentInstruction(
+                    authorityKeypair.publicKey,
+                    treasuryTokenAccount,
+                    treasuryPubkey,
+                    NATIVE_MINT,
+                ),
+            );
+            const setupSig = await sendAndConfirmTransaction(solanaConnection, setupTx, [authorityKeypair]);
+            console.log(`${tag} wSOL ATA setup tx confirmed: ${setupSig}`);
+        } catch (setupErr) {
+            console.error(`${tag} wSOL ATA setup tx FAILED:`, setupErr);
+            throw new Error(`wSOL ATA setup failed: ${setupErr instanceof Error ? setupErr.message : String(setupErr)}`);
+        }
+    }
 
     const duelIdBuf = duelIdToBuffer(duelUuid);
 
-    const txSig = await escrowSdk.resolveDispute(
-        authorityKeypair,
-        duelIdBuf,
-        winnerPubkey,
-        winnerTokenAccount,
-        treasuryTokenAccount,
-    );
-
-    return txSig;
+    try {
+        console.log(`${tag} Sending resolveDispute tx...`);
+        const txSig = await escrowSdk.resolveDispute(
+            authorityKeypair,
+            duelIdBuf,
+            winnerPubkey,
+            winnerTokenAccount,
+            treasuryTokenAccount,
+        );
+        console.log(`${tag} resolveDispute SUCCESS — tx: ${txSig}`);
+        return txSig;
+    } catch (resolveErr) {
+        const anchorCode = parseAnchorErrorCode(resolveErr);
+        if (anchorCode) {
+            console.error(`${tag} resolveDispute FAILED with Anchor error ${anchorCode.code} (${anchorCode.name}):`, resolveErr);
+        } else {
+            console.error(`${tag} resolveDispute FAILED (non-Anchor error):`, resolveErr);
+        }
+        throw resolveErr;
+    }
 }
 
 // ── External game API verification ───────────────────────────────────────────

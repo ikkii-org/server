@@ -40,15 +40,8 @@
     {
       "idx": 5,
       "version": "7",
-      "when": 1772734962277,
-      "tag": "0005_add_game_api_fields",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1772736863957,
-      "tag": "0006_remove_game_api_key",
+      "when": 1772803754392,
+      "tag": "0007_small_albert_cleary",
       "breakpoints": true
     }
   ]

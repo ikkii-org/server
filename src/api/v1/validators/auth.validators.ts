@@ -7,11 +7,14 @@ const passwordSchema = z
     .min(8, "Password must be at least 8 characters")
     .max(100, "Password must be at most 100 characters");
 
-// Profile picture URL (optional)
+// Profile picture: base64 data URI (optional at signup)
 const pfpSchema = z
     .string()
-    .url("Invalid URL format")
-    .max(500, "URL must be at most 500 characters")
+    .max(3_000_000, "Image is too large (max ~2MB)")
+    .regex(
+        /^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/]+=*$/,
+        "Must be a base64 data URI (data:image/...;base64,...)"
+    )
     .optional();
 
 // Signup validation

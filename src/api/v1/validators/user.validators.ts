@@ -21,10 +21,16 @@ export const solanaAddressSchema = z
 // User ID: UUID v4
 export const userIdSchema = z.string().uuid("Invalid user ID");
 
+// Profile picture: base64 data URI (max ~2MB encoded ≈ ~2.7M chars)
+const MAX_PFP_LENGTH = 3_000_000;
+
 const pfpSchema = z
     .string()
-    .url("Invalid URL format")
-    .max(500, "URL must be at most 500 characters");
+    .max(MAX_PFP_LENGTH, "Image is too large (max ~2MB)")
+    .regex(
+        /^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/]+=*$/,
+        "Must be a base64 data URI (data:image/...;base64,...)"
+    );
 
 export const updatePfpSchema = z.object({
     pfp: pfpSchema,
