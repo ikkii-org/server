@@ -7,7 +7,8 @@
     "dev": "bun --watch src/server.ts",
     "start": "bun src/server.ts",
     "test": "bun test",
-    "db:seed": "bun src/db/seed-games.ts"
+    "db:seed": "bun src/db/seed-games.ts",
+    "init-platform": "bun src/scripts/init-platform.ts"
   },
   "keywords": [],
   "author": "",
