@@ -7,7 +7,7 @@
 import { db } from "../../../db";
 import { games, gameProfiles, users } from "../../../db/schema";
 import { eq, and } from "drizzle-orm";
-import { getPlayer as getClashRoyalePlayer } from "./clash-royale.service";
+import { getPlayer as getClashRoyalePlayer, type ClashRoyalePlayer } from "./clash-royale.service";
 import { env } from "../../../config/env";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -50,7 +50,9 @@ async function getGameByName(gameName: string) {
 export async function linkGameAccount(
   userId: string,
   gameName: string,
-  playerId: string
+  playerId: string,
+  claimedWins?: number,
+  claimedChallengeMaxWins?: number,
 ): Promise<SyncResult> {
   // 1. Find the game
   const game = await getGameByName(gameName);
@@ -58,8 +60,8 @@ export async function linkGameAccount(
     return { success: false, profile: null, error: `Game '${gameName}' not found` };
   }
 
-  // 2. Validate the player ID against the game's API
-  const validation = await validatePlayerId(gameName, playerId, game);
+  // 2. Validate the player ID against the game's API (includes ownership check for CR)
+  const validation = await validatePlayerId(gameName, playerId, game, claimedWins, claimedChallengeMaxWins);
   if (!validation.valid) {
     return { success: false, profile: null, error: validation.error! };
   }
@@ -141,6 +143,61 @@ interface ValidationResult {
   stats?: Record<string, unknown>;
 }
 
+// ─── Ownership Verification ───────────────────────────────────────────────────
+
+const WINS_TOLERANCE = 5;
+
+/**
+ * Extended CR player type that includes stat fields present in the live API
+ * response but not yet in the base ClashRoyalePlayer interface.
+ */
+type ClashRoyalePlayerFull = ClashRoyalePlayer & {
+  wins: number;
+  losses: number;
+  challengeMaxWins: number;
+};
+
+/**
+ * Two-question ownership check against live CR API data:
+ *  1. Career wins — verified with ±WINS_TOLERANCE (accounts for games played mid-verification)
+ *  2. Challenge max wins — exact match (a personal best, never decreases mid-session)
+ *
+ * Returns null on success, an error string on failure.
+ */
+function verifyClashRoyaleOwnership(
+  player: ClashRoyalePlayerFull,
+  claimedWins: number | undefined,
+  claimedChallengeMaxWins: number | undefined,
+): string | null {
+  // Both fields must be provided
+  if (claimedWins === undefined || claimedChallengeMaxWins === undefined) {
+    return (
+      "To verify this is your account, please provide: " +
+      "(1) your career wins count (visible on your profile stats page) and " +
+      "(2) your all-time challenge max wins (Settings → Stats → Challenge)."
+    );
+  }
+
+  // Check 1: career wins within tolerance
+  const winsDiff = Math.abs(player.wins - claimedWins);
+  if (winsDiff > WINS_TOLERANCE) {
+    return (
+      `Career wins mismatch — your account has ${player.wins} wins, but you submitted ${claimedWins}. ` +
+      `Check your profile stats page and try again.`
+    );
+  }
+
+  // Check 2: challenge max wins — exact
+  if (player.challengeMaxWins !== claimedChallengeMaxWins) {
+    return (
+      `Challenge max wins mismatch — submitted ${claimedChallengeMaxWins}, but your account shows ${player.challengeMaxWins}. ` +
+      `Find this under Settings → Stats → Challenge in-game.`
+    );
+  }
+
+  return null;
+}
+
 /**
  * Validate a player ID against the game's external API.
  * Returns the canonical ID and initial stats on success.
@@ -149,9 +206,11 @@ async function validatePlayerId(
   gameName: string,
   playerId: string,
   game: typeof games.$inferSelect,
+  claimedWins?: number,
+  claimedChallengeMaxWins?: number,
 ): Promise<ValidationResult> {
   if (gameName.toLowerCase() === "clash royale") {
-    return await validateClashRoyaleTag(playerId, game);
+    return await validateClashRoyaleTag(playerId, game, claimedWins, claimedChallengeMaxWins);
   }
 
   // Games without API validation — accept any player ID
@@ -159,12 +218,15 @@ async function validatePlayerId(
 }
 
 /**
- * Validate a Clash Royale player tag by fetching the player profile.
+ * Validate a Clash Royale player tag by fetching the player profile,
+ * then verify ownership via the two-question check.
  * Normalizes the tag (adds "#" prefix if missing, uppercases).
  */
 async function validateClashRoyaleTag(
   rawTag: string,
   game: typeof games.$inferSelect,
+  claimedWins?: number,
+  claimedChallengeMaxWins?: number,
 ): Promise<ValidationResult> {
   // Normalize: ensure "#" prefix, uppercase
   let tag = rawTag.trim().toUpperCase();
@@ -187,6 +249,16 @@ async function validateClashRoyaleTag(
       valid: false,
       error: `Player tag "${tag}" not found on Clash Royale. Make sure you entered the correct tag (e.g. #2YQ8JCRUG).`,
     };
+  }
+
+  // ── Ownership verification ──────────────────────────────────────────────────
+  const ownershipError = verifyClashRoyaleOwnership(
+    player as ClashRoyalePlayerFull,
+    claimedWins,
+    claimedChallengeMaxWins,
+  );
+  if (ownershipError) {
+    return { valid: false, error: ownershipError };
   }
 
   return {

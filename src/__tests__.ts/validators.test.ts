@@ -3,6 +3,7 @@ import { signupSchema, loginSchema } from "../api/v1/validators/auth.validators"
 import { createDuelSchema, submitResultSchema, duelIdSchema } from "../api/v1/validators/duel.validators";
 import { usernameSchema, userIdSchema, updatePfpSchema } from "../api/v1/validators/user.validators";
 import { limitSchema, offsetSchema } from "../api/v1/validators/leaderboard.validators";
+import { linkGameAccountSchema } from "../api/v1/validators/game-profile.validators";
 
 // ─── Auth Validators ──────────────────────────────────────────────────────────
 
@@ -52,22 +53,22 @@ describe("signupSchema", () => {
         expect(result.success).toBe(false);
     });
 
-    it("accepts optional pfp URL", () => {
+    it("accepts optional pfp as base64 data URI", () => {
+        const result = signupSchema.safeParse({
+            username: "alice",
+            walletKey: "So11111111111111111111111111111111111111112",
+            password: "securepass",
+            pfp: "data:image/png;base64,iVBORw0KGgo=",
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it("rejects pfp that is not a base64 data URI", () => {
         const result = signupSchema.safeParse({
             username: "alice",
             walletKey: "So11111111111111111111111111111111111111112",
             password: "securepass",
             pfp: "https://example.com/avatar.png",
-        });
-        expect(result.success).toBe(true);
-    });
-
-    it("rejects invalid pfp URL", () => {
-        const result = signupSchema.safeParse({
-            username: "alice",
-            walletKey: "So11111111111111111111111111111111111111112",
-            password: "securepass",
-            pfp: "not-a-url",
         });
         expect(result.success).toBe(false);
     });
@@ -119,11 +120,15 @@ describe("userIdSchema", () => {
 });
 
 describe("updatePfpSchema", () => {
-    it("accepts valid URL", () => {
-        expect(updatePfpSchema.safeParse({ pfp: "https://cdn.example.com/img.png" }).success).toBe(true);
+    it("accepts valid base64 data URI", () => {
+        expect(updatePfpSchema.safeParse({ pfp: "data:image/jpeg;base64,/9j/4AAQ=" }).success).toBe(true);
     });
 
-    it("rejects non-URL", () => {
+    it("rejects plain URL (not a base64 data URI)", () => {
+        expect(updatePfpSchema.safeParse({ pfp: "https://cdn.example.com/img.png" }).success).toBe(false);
+    });
+
+    it("rejects arbitrary string", () => {
         expect(updatePfpSchema.safeParse({ pfp: "just-a-string" }).success).toBe(false);
     });
 });
@@ -141,38 +146,50 @@ describe("duelIdSchema", () => {
 });
 
 describe("createDuelSchema", () => {
-    it("accepts valid input", () => {
-        const result = createDuelSchema.safeParse({
-            stakeAmount: 1.5,
-            tokenMint: "So11111111111111111111111111111111111111112",
-        });
-        expect(result.success).toBe(true);
+    // Required fields: stakeAmount, stakeAmountSmallest, tokenMint, txSignature, duelId
+    const validBase = {
+        stakeAmount: 1.5,
+        stakeAmountSmallest: 1500000,
+        tokenMint: "So11111111111111111111111111111111111111112",
+        txSignature: "5J9pQkNx2YHzLmVwRtKsAeBfCdGiJoMqPrSuTvWxYz",
+        duelId: "550e8400-e29b-41d4-a716-446655440000",
+    };
+
+    it("accepts valid input with all required fields", () => {
+        expect(createDuelSchema.safeParse(validBase).success).toBe(true);
     });
 
     it("rejects zero or negative stake amount", () => {
-        expect(createDuelSchema.safeParse({ stakeAmount: 0, tokenMint: "So11111111111111111111111111111111111111112" }).success).toBe(false);
-        expect(createDuelSchema.safeParse({ stakeAmount: -1, tokenMint: "So11111111111111111111111111111111111111112" }).success).toBe(false);
+        expect(createDuelSchema.safeParse({ ...validBase, stakeAmount: 0 }).success).toBe(false);
+        expect(createDuelSchema.safeParse({ ...validBase, stakeAmount: -1 }).success).toBe(false);
     });
 
     it("rejects missing tokenMint", () => {
-        expect(createDuelSchema.safeParse({ stakeAmount: 1.0 }).success).toBe(false);
+        const { tokenMint: _, ...rest } = validBase;
+        expect(createDuelSchema.safeParse(rest).success).toBe(false);
+    });
+
+    it("rejects missing txSignature", () => {
+        const { txSignature: _, ...rest } = validBase;
+        expect(createDuelSchema.safeParse(rest).success).toBe(false);
+    });
+
+    it("rejects missing duelId", () => {
+        const { duelId: _, ...rest } = validBase;
+        expect(createDuelSchema.safeParse(rest).success).toBe(false);
+    });
+
+    it("rejects non-integer stakeAmountSmallest", () => {
+        expect(createDuelSchema.safeParse({ ...validBase, stakeAmountSmallest: 1.5 }).success).toBe(false);
     });
 
     it("rejects invalid gameId (non-UUID)", () => {
-        const result = createDuelSchema.safeParse({
-            stakeAmount: 1.0,
-            tokenMint: "So11111111111111111111111111111111111111112",
-            gameId: "not-a-uuid",
-        });
+        const result = createDuelSchema.safeParse({ ...validBase, gameId: "not-a-uuid" });
         expect(result.success).toBe(false);
     });
 
     it("accepts optional UUID gameId", () => {
-        const result = createDuelSchema.safeParse({
-            stakeAmount: 1.0,
-            tokenMint: "So11111111111111111111111111111111111111112",
-            gameId: "550e8400-e29b-41d4-a716-446655440000",
-        });
+        const result = createDuelSchema.safeParse({ ...validBase, gameId: "550e8400-e29b-41d4-a716-446655440000" });
         expect(result.success).toBe(true);
     });
 });
@@ -225,6 +242,58 @@ describe("offsetSchema", () => {
     });
 
     it("rejects negative offset", () => {
-        expect(offsetSchema.safeParse("-1").success).toBe(false);
+    expect(offsetSchema.safeParse("-1").success).toBe(false);
+  });
+});
+
+// ─── Game Profile Validators ──────────────────────────────────────────────────
+
+describe("linkGameAccountSchema", () => {
+  const base = { gameName: "Clash Royale", playerId: "#2YQ8JCRUG" };
+
+  it("accepts valid input with both verification fields", () => {
+    const result = linkGameAccountSchema.safeParse({
+      ...base,
+      claimedWins: 150,
+      claimedChallengeMaxWins: 12,
     });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts input omitting both verification fields (optional at schema level)", () => {
+    expect(linkGameAccountSchema.safeParse(base).success).toBe(true);
+  });
+
+  it("rejects missing gameName", () => {
+    expect(linkGameAccountSchema.safeParse({ playerId: "#2YQ8JCRUG" }).success).toBe(false);
+  });
+
+  it("rejects missing playerId", () => {
+    expect(linkGameAccountSchema.safeParse({ gameName: "Clash Royale" }).success).toBe(false);
+  });
+
+  it("rejects negative claimedWins", () => {
+    expect(linkGameAccountSchema.safeParse({ ...base, claimedWins: -1 }).success).toBe(false);
+  });
+
+  it("rejects float claimedWins", () => {
+    expect(linkGameAccountSchema.safeParse({ ...base, claimedWins: 150.5 }).success).toBe(false);
+  });
+
+  it("rejects negative claimedChallengeMaxWins", () => {
+    expect(linkGameAccountSchema.safeParse({ ...base, claimedChallengeMaxWins: -1 }).success).toBe(false);
+  });
+
+  it("rejects float claimedChallengeMaxWins", () => {
+    expect(linkGameAccountSchema.safeParse({ ...base, claimedChallengeMaxWins: 11.9 }).success).toBe(false);
+  });
+
+  it("accepts zero for both verification fields (valid edge case)", () => {
+    const result = linkGameAccountSchema.safeParse({
+      ...base,
+      claimedWins: 0,
+      claimedChallengeMaxWins: 0,
+    });
+    expect(result.success).toBe(true);
+  });
 });

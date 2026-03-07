@@ -25,8 +25,8 @@ export async function linkGameAccountHandler(c: Context) {
       return c.json({ error: result.error.issues[0].message }, 400);
     }
 
-    const { gameName, playerId } = result.data;
-    const syncResult = await linkGameAccount(userId, gameName, playerId);
+    const { gameName, playerId, claimedWins, claimedChallengeMaxWins } = result.data;
+    const syncResult = await linkGameAccount(userId, gameName, playerId, claimedWins, claimedChallengeMaxWins);
 
     if (!syncResult.success) {
       return c.json({ error: syncResult.error }, 400);
