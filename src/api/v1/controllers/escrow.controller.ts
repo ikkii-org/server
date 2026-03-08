@@ -7,6 +7,7 @@ import {
     depositFunds,
     withdrawFunds,
     transferStake,
+    getTransactions,
 } from "../services/escrow.service";
 
 function requireSelf(c: Context, userId: string): Response | null {
@@ -43,6 +44,22 @@ export async function getWalletHandler(c: Context) {
     } catch (error) {
         const message = error instanceof Error ? error.message : "Wallet not found";
         return c.json({ error: message }, 404);
+    }
+}
+
+export async function getTransactionsHandler(c: Context) {
+    try {
+        const userId = c.req.param("userId");
+        const forbidden = requireSelf(c, userId);
+        if (forbidden) return forbidden;
+
+        const limit = Number(c.req.query("limit")) || 50;
+        const txs = await getTransactions(userId, limit);
+
+        return c.json({ transactions: txs }, 200);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to fetch transactions";
+        return c.json({ error: message }, 400);
     }
 }
 

@@ -1,7 +1,42 @@
 import { db } from "../../../db";
-import { wallet } from "../../../db/schema";
-import { eq, sql } from "drizzle-orm";
+import { wallet, transactions } from "../../../db/schema";
+import { eq, sql, desc } from "drizzle-orm";
 import type { Wallet } from "../../../db/schema";
+
+// ─── Transaction Logging ────────────────────────────────────────────────────────
+
+/**
+ * Helper to log a transaction row when funds move.
+ */
+export async function logTransaction(
+    userId: string,
+    duelId: string | null,
+    type: "STAKE" | "REWARD" | "WITHDRAW" | "CLAIM",
+    status: "PENDING" | "SUCCESS" | "FAILED",
+    amount: number | string
+) {
+    if (!userId) return;
+
+    await db.insert(transactions).values({
+        userId,
+        duelId: duelId || null,
+        transactionType: type,
+        transactionStatus: status,
+        amount: amount.toString(),
+    });
+}
+
+/**
+ * Fetch transaction history for a user, ordered by most recent first
+ */
+export async function getTransactions(userId: string, limit = 50) {
+    return await db
+        .select()
+        .from(transactions)
+        .where(eq(transactions.userId, userId))
+        .orderBy(desc(transactions.createdAt))
+        .limit(limit);
+}
 
 // ─── Wallet CRUD ──────────────────────────────────────────────────────────────
 
@@ -49,6 +84,8 @@ export async function lockFunds(userId: string, amount: number): Promise<Wallet>
         .where(eq(wallet.userId, userId))
         .returning();
 
+    await logTransaction(userId, null, "STAKE", "SUCCESS", amount);
+
     return updated;
 }
 
@@ -66,6 +103,9 @@ export async function unlockFunds(userId: string, amount: number): Promise<Walle
         .returning();
 
     if (!updated) throw new Error("Wallet not found");
+
+    await logTransaction(userId, null, "STAKE", "FAILED", amount); // refund essentially
+
     return updated;
 }
 
@@ -88,6 +128,21 @@ export async function transferStake(
             .update(wallet)
             .set({ availableBalance: sql`${wallet.availableBalance} + ${amount}` })
             .where(eq(wallet.userId, winnerUserId));
+
+        await tx.insert(transactions).values([
+            {
+                userId: loserUserId,
+                transactionType: "STAKE",
+                transactionStatus: "SUCCESS", // completed loss
+                amount: amount.toString(),
+            },
+            {
+                userId: winnerUserId,
+                transactionType: "REWARD",
+                transactionStatus: "SUCCESS",
+                amount: amount.toString(),
+            }
+        ]);
     });
 }
 
@@ -102,6 +157,9 @@ export async function depositFunds(userId: string, amount: number): Promise<Wall
         .returning();
 
     if (!updated) throw new Error("Wallet not found");
+
+    await logTransaction(userId, null, "CLAIM", "SUCCESS", amount);
+
     return updated;
 }
 
@@ -120,6 +178,8 @@ export async function withdrawFunds(userId: string, amount: number): Promise<Wal
         .set({ availableBalance: sql`${wallet.availableBalance} - ${amount}` })
         .where(eq(wallet.userId, userId))
         .returning();
+
+    await logTransaction(userId, null, "WITHDRAW", "SUCCESS", amount);
 
     return updated;
 }

@@ -7,6 +7,7 @@ import {
     lockFundsHandler,
     unlockFundsHandler,
     transferStakeHandler,
+    getTransactionsHandler,
 } from "../controllers/escrow.controller";
 import { adminMiddleware } from "../../../middleware/admin.middleware";
 
@@ -14,6 +15,9 @@ export const escrowRoutes = new Hono();
 
 // POST /escrow/wallets                    — create a wallet (admin only — auto-called on signup)
 escrowRoutes.post("/wallets", adminMiddleware, createWalletHandler);
+
+// GET  /escrow/wallets/:userId/transactions — get transaction history
+escrowRoutes.get("/wallets/:userId/transactions", getTransactionsHandler);
 
 // GET  /escrow/wallets/:userId            — get own wallet
 escrowRoutes.get("/wallets/:userId", getWalletHandler);

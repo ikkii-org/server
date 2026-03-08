@@ -1,7 +1,7 @@
 import { users } from "./user.schema";
 import { duels } from "./games.schema";
 
-import { uuid, pgTable, index } from "drizzle-orm/pg-core";
+import { uuid, pgTable, index, numeric, timestamp } from "drizzle-orm/pg-core";
 import { transactionStatusEnum, transactionTypeEnum } from "./enums";
 
 export const transactions = pgTable("transactions", {
@@ -10,10 +10,11 @@ export const transactions = pgTable("transactions", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   duelId: uuid("duel_id")
-    .notNull()
     .references(() => duels.id, { onDelete: "cascade" }),
   transactionType: transactionTypeEnum("transaction_type").notNull(),
   transactionStatus: transactionStatusEnum("transaction_status").notNull(),
+  amount: numeric("amount", { precision: 20, scale: 6 }).notNull().default("0"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => {
   return {
     userIdIdx: index("transactions_user_id_idx").on(table.userId),
