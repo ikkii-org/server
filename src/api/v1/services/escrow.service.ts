@@ -11,7 +11,7 @@ import type { Wallet } from "../../../db/schema";
 export async function logTransaction(
     userId: string,
     duelId: string | null,
-    type: "STAKE" | "REWARD" | "WITHDRAW" | "CLAIM",
+    type: "STAKE" | "REWARD" | "WITHDRAW" | "CLAIM" | "DEPOSIT",
     status: "PENDING" | "SUCCESS" | "FAILED",
     amount: number | string
 ) {
@@ -158,7 +158,7 @@ export async function depositFunds(userId: string, amount: number): Promise<Wall
 
     if (!updated) throw new Error("Wallet not found");
 
-    await logTransaction(userId, null, "CLAIM", "SUCCESS", amount);
+    await logTransaction(userId, null, "DEPOSIT", "SUCCESS", amount);
 
     return updated;
 }

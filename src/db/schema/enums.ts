@@ -13,6 +13,7 @@ export const transactionTypeEnum = pgEnum("transaction_type", [
   "REWARD",
   "WITHDRAW",
   "CLAIM",
+  "DEPOSIT",
 ]);
 
 export const transactionStatusEnum = pgEnum("transaction_status", [
