@@ -1,5 +1,5 @@
 import { db } from "../../../db";
-import { duels, users, games, gameProfiles } from "../../../db/schema";
+import { duels, users, games, gameProfiles, portfolio } from "../../../db/schema";
 import { eq, and, lt, sql, desc } from "drizzle-orm";
 import type { DuelStatus } from "../types/duel.types";
 import type { Duel, DuelSubmitResult } from "../models/duel.model";
@@ -60,7 +60,7 @@ async function requireUser(username: string) {
  */
 function getApiKeyForGame(gameName: string | undefined): string | null {
     if (!gameName) return null;
-    
+
     switch (gameName.toLowerCase()) {
         case "clash royale":
             return env.CLASH_ROYALE_TOKEN || null;
@@ -328,6 +328,9 @@ export async function submitResult(
                 await tx.update(users).set({ wins: sql`${users.wins} + 1`, updatedAt: new Date() }).where(eq(users.id, winner.id));
                 await tx.update(users).set({ losses: sql`${users.losses} + 1`, updatedAt: new Date() }).where(eq(users.id, loser.id));
 
+                await tx.update(portfolio).set({ totalStakeWon: sql`${portfolio.totalStakeWon} + ${duel.stakeAmount}`, updatedAt: new Date() }).where(eq(portfolio.userId, winner.id));
+                await tx.update(portfolio).set({ totalStakeLost: sql`${portfolio.totalStakeLost} + ${duel.stakeAmount}`, updatedAt: new Date() }).where(eq(portfolio.userId, loser.id));
+
                 return row;
             });
 
@@ -397,6 +400,9 @@ export async function submitResult(
 
                                 await tx.update(users).set({ wins: sql`${users.wins} + 1`, updatedAt: new Date() }).where(eq(users.id, verifiedUser.id));
                                 await tx.update(users).set({ losses: sql`${users.losses} + 1`, updatedAt: new Date() }).where(eq(users.id, loser.id));
+
+                                await tx.update(portfolio).set({ totalStakeWon: sql`${portfolio.totalStakeWon} + ${duel.stakeAmount}`, updatedAt: new Date() }).where(eq(portfolio.userId, verifiedUser.id));
+                                await tx.update(portfolio).set({ totalStakeLost: sql`${portfolio.totalStakeLost} + ${duel.stakeAmount}`, updatedAt: new Date() }).where(eq(portfolio.userId, loser.id));
 
                                 return row;
                             });
