@@ -8,6 +8,7 @@ import {
     unlockFundsHandler,
     transferStakeHandler,
     getTransactionsHandler,
+    recordTransactionHandler,
 } from "../controllers/escrow.controller";
 import { adminMiddleware } from "../../../middleware/admin.middleware";
 
@@ -35,5 +36,9 @@ escrowRoutes.post("/wallets/:userId/lock", adminMiddleware, lockFundsHandler);
 escrowRoutes.post("/wallets/:userId/unlock", adminMiddleware, unlockFundsHandler);
 
 // POST /escrow/transfer                   — transfer stake from loser to winner (admin only)
+// POST /escrow/transfer                   — transfer stake from loser to winner (admin only)
 escrowRoutes.post("/transfer", adminMiddleware, transferStakeHandler);
+
+// POST /escrow/wallets/:userId/record-tx   — record a signed on-chain transaction
+escrowRoutes.post("/wallets/:userId/record-tx", recordTransactionHandler);
 

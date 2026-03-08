@@ -8,6 +8,7 @@ import {
     withdrawFunds,
     transferStake,
     getTransactions,
+    logTransaction,
 } from "../services/escrow.service";
 
 function requireSelf(c: Context, userId: string): Response | null {
@@ -152,6 +153,30 @@ export async function transferStakeHandler(c: Context) {
         return c.json({ success: true }, 200);
     } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to transfer stake";
+        return c.json({ error: message }, 400);
+    }
+}
+
+export async function recordTransactionHandler(c: Context) {
+    try {
+        const userId = c.req.param("userId");
+        const forbidden = requireSelf(c, userId);
+        if (forbidden) return forbidden;
+
+        const { type, amount, duelId } = await c.req.json();
+
+        const validTypes = ["STAKE", "REWARD", "WITHDRAW", "CLAIM", "DEPOSIT"];
+        if (!type || !validTypes.includes(type)) {
+            return c.json({ error: `type must be one of: ${validTypes.join(", ")}` }, 400);
+        }
+        if (amount === undefined || amount === null) {
+            return c.json({ error: "amount is required" }, 400);
+        }
+
+        await logTransaction(userId, duelId ?? null, type, "SUCCESS", amount);
+        return c.json({ success: true }, 201);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to record transaction";
         return c.json({ error: message }, 400);
     }
 }

@@ -1,4 +1,6 @@
 import { Hono } from "hono";
+import { db } from "../../db";
+import { games } from "../../db/schema";
 import { authMiddleware } from "../../middleware/auth.middleware";
 import { healthRoutes } from "./routes/health.routes";
 import { authRoutes } from "./routes/auth.routes";
@@ -12,6 +14,10 @@ import { gameProfileRoutes } from "./routes/game-profile.routes";
 export const v1Router = new Hono();
 
 // ─── Public routes ────────────────────────────────────────────────────────────
+v1Router.get("/games", async (c) => {
+    const allGames = await db.select().from(games);
+    return c.json({ games: allGames });
+});
 v1Router.route("/health", healthRoutes);
 v1Router.route("/auth", authRoutes);
 
