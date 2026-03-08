@@ -6,8 +6,8 @@ export interface LeaderboardEntry {
     wins: number;
     losses: number;
     winPercentage: number;
-    totalStakeWon: number;
-    totalStakeLost: number;
+    totalStakeWon: string;
+    totalStakeLost: string;
     currentRank: number;
     previousRank: number;
 }

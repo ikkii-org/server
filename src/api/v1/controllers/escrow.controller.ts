@@ -2,14 +2,29 @@ import { Context } from "hono";
 import {
     createWallet,
     getWallet,
-    lockFunds,
-    unlockFunds,
     depositFunds,
     withdrawFunds,
+    lockFunds,
+    unlockFunds,
     transferStake,
     getTransactions,
     logTransaction,
 } from "../services/escrow.service";
+
+const MAX_AMOUNT = 1_000_000;
+
+function validateAmount(amount: unknown): number {
+    if (typeof amount !== "number" || isNaN(amount)) {
+        throw new Error("Amount must be a valid number");
+    }
+    if (amount <= 0) {
+        throw new Error("Amount must be positive");
+    }
+    if (amount > MAX_AMOUNT) {
+        throw new Error(`Amount exceeds maximum of ${MAX_AMOUNT}`);
+    }
+    return amount;
+}
 
 function requireSelf(c: Context, userId: string): Response | null {
     if (c.get("userId") !== userId) {
@@ -71,12 +86,9 @@ export async function depositHandler(c: Context) {
         if (forbidden) return forbidden;
 
         const { amount } = await c.req.json();
+        const validatedAmount = validateAmount(amount);
 
-        if (!amount || amount <= 0) {
-            return c.json({ error: "amount must be a positive number" }, 400);
-        }
-
-        const w = await depositFunds(userId, amount);
+        const w = await depositFunds(userId, validatedAmount);
         return c.json({ wallet: w }, 200);
     } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to deposit funds";
@@ -91,12 +103,9 @@ export async function withdrawHandler(c: Context) {
         if (forbidden) return forbidden;
 
         const { amount } = await c.req.json();
+        const validatedAmount = validateAmount(amount);
 
-        if (!amount || amount <= 0) {
-            return c.json({ error: "amount must be a positive number" }, 400);
-        }
-
-        const w = await withdrawFunds(userId, amount);
+        const w = await withdrawFunds(userId, validatedAmount);
         return c.json({ wallet: w }, 200);
     } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to withdraw funds";
@@ -108,12 +117,9 @@ export async function lockFundsHandler(c: Context) {
     try {
         const userId = c.req.param("userId");
         const { amount } = await c.req.json();
+        const validatedAmount = validateAmount(amount);
 
-        if (!amount || amount <= 0) {
-            return c.json({ error: "amount must be a positive number" }, 400);
-        }
-
-        const w = await lockFunds(userId, amount);
+        const w = await lockFunds(userId, validatedAmount);
         return c.json({ wallet: w }, 200);
     } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to lock funds";
@@ -125,12 +131,9 @@ export async function unlockFundsHandler(c: Context) {
     try {
         const userId = c.req.param("userId");
         const { amount } = await c.req.json();
+        const validatedAmount = validateAmount(amount);
 
-        if (!amount || amount <= 0) {
-            return c.json({ error: "amount must be a positive number" }, 400);
-        }
-
-        const w = await unlockFunds(userId, amount);
+        const w = await unlockFunds(userId, validatedAmount);
         return c.json({ wallet: w }, 200);
     } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to unlock funds";
@@ -169,6 +172,7 @@ export async function recordTransactionHandler(c: Context) {
         if (!type || !validTypes.includes(type)) {
             return c.json({ error: `type must be one of: ${validTypes.join(", ")}` }, 400);
         }
+
         if (amount === undefined || amount === null) {
             return c.json({ error: "amount is required" }, 400);
         }

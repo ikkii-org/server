@@ -4,7 +4,7 @@ import {
   text,
   timestamp,
   integer,
-  real,
+  numeric,
   uuid,
   index,
 } from "drizzle-orm/pg-core";
@@ -30,11 +30,11 @@ export const portfolio = pgTable("portfolio", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" })
     .unique(),
-  solanaBalance: real("solana_balance").notNull().default(0),
+  solanaBalance: numeric("solana_balance", { precision: 20, scale: 9 }).notNull().default("0"),
   currentRank: integer("current_rank").notNull().default(0),
   previousRank: integer("previous_rank").notNull().default(0),
-  totalStakeWon: real("total_won").notNull().default(0),
-  totalStakeLost: real("total_lost").notNull().default(0),
+  totalStakeWon: numeric("total_won", { precision: 20, scale: 6 }).notNull().default("0"),
+  totalStakeLost: numeric("total_lost", { precision: 20, scale: 6 }).notNull().default("0"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => {

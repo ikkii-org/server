@@ -13,6 +13,19 @@ export function rateLimit(opts: RateLimitOptions) {
     // Map<ip, timestamps[]>
     const hits = new Map<string, number[]>();
 
+    // Cleanup old entries every 5 minutes to prevent memory leak
+    setInterval(() => {
+        const now = Date.now();
+        for (const [ip, timestamps] of hits.entries()) {
+            const filtered = timestamps.filter((t) => t > now - windowMs);
+            if (filtered.length === 0) {
+                hits.delete(ip);
+            } else {
+                hits.set(ip, filtered);
+            }
+        }
+    }, 5 * 60 * 1000);
+
     return async (c: Context, next: Next): Promise<Response | void> => {
         const ip =
             c.req.header("x-forwarded-for")?.split(",")[0].trim() ??

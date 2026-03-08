@@ -1,6 +1,6 @@
 import { db } from "../../../db";
 import { wallet, transactions } from "../../../db/schema";
-import { eq, sql, desc } from "drizzle-orm";
+import { eq, sql, desc, and } from "drizzle-orm";
 import type { Wallet } from "../../../db/schema";
 
 // ─── Transaction Logging ────────────────────────────────────────────────────────
@@ -30,12 +30,13 @@ export async function logTransaction(
  * Fetch transaction history for a user, ordered by most recent first
  */
 export async function getTransactions(userId: string, limit = 50) {
+    const safeLimit = Math.min(Math.max(1, limit), 100);
     return await db
         .select()
         .from(transactions)
         .where(eq(transactions.userId, userId))
         .orderBy(desc(transactions.createdAt))
-        .limit(limit);
+        .limit(safeLimit);
 }
 
 // ─── Wallet CRUD ──────────────────────────────────────────────────────────────
@@ -69,11 +70,8 @@ export async function getWallet(userId: string): Promise<Wallet> {
  * Throws if the user does not have enough available balance.
  */
 export async function lockFunds(userId: string, amount: number): Promise<Wallet> {
-    const w = await getWallet(userId);
-
-    if (parseFloat(w.availableBalance ?? "0") < amount) {
-        throw new Error("Insufficient available balance");
-    }
+    if (!userId) throw new Error("User ID is required");
+    if (amount <= 0) throw new Error("Amount must be positive");
 
     const [updated] = await db
         .update(wallet)
@@ -81,8 +79,15 @@ export async function lockFunds(userId: string, amount: number): Promise<Wallet>
             availableBalance: sql`${wallet.availableBalance} - ${amount}`,
             lockedBalance: sql`${wallet.lockedBalance} + ${amount}`,
         })
-        .where(eq(wallet.userId, userId))
+        .where(and(
+            eq(wallet.userId, userId),
+            sql`${wallet.availableBalance} >= ${amount}`
+        ))
         .returning();
+
+    if (!updated) {
+        throw new Error("Insufficient available balance");
+    }
 
     await logTransaction(userId, null, "STAKE", "SUCCESS", amount);
 
@@ -167,17 +172,21 @@ export async function depositFunds(userId: string, amount: number): Promise<Wall
  * Withdraw (reduce) funds from a user's available balance.
  */
 export async function withdrawFunds(userId: string, amount: number): Promise<Wallet> {
-    const w = await getWallet(userId);
-
-    if (parseFloat(w.availableBalance ?? "0") < amount) {
-        throw new Error("Insufficient available balance");
-    }
+    if (!userId) throw new Error("User ID is required");
+    if (amount <= 0) throw new Error("Amount must be positive");
 
     const [updated] = await db
         .update(wallet)
         .set({ availableBalance: sql`${wallet.availableBalance} - ${amount}` })
-        .where(eq(wallet.userId, userId))
+        .where(and(
+            eq(wallet.userId, userId),
+            sql`${wallet.availableBalance} >= ${amount}`
+        ))
         .returning();
+
+    if (!updated) {
+        throw new Error("Insufficient available balance");
+    }
 
     await logTransaction(userId, null, "WITHDRAW", "SUCCESS", amount);
 

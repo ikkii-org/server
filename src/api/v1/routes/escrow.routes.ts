@@ -11,8 +11,11 @@ import {
     recordTransactionHandler,
 } from "../controllers/escrow.controller";
 import { adminMiddleware } from "../../../middleware/admin.middleware";
+import { rateLimit } from "../../../middleware/rate-limit.middleware";
 
 export const escrowRoutes = new Hono();
+
+const financialRateLimit = rateLimit({ limit: 10, windowMs: 60_000 });
 
 // POST /escrow/wallets                    — create a wallet (admin only — auto-called on signup)
 escrowRoutes.post("/wallets", adminMiddleware, createWalletHandler);
@@ -24,10 +27,10 @@ escrowRoutes.get("/wallets/:userId/transactions", getTransactionsHandler);
 escrowRoutes.get("/wallets/:userId", getWalletHandler);
 
 // POST /escrow/wallets/:userId/deposit    — deposit funds (on-chain confirmed)
-escrowRoutes.post("/wallets/:userId/deposit", depositHandler);
+escrowRoutes.post("/wallets/:userId/deposit", financialRateLimit, depositHandler);
 
 // POST /escrow/wallets/:userId/withdraw   — withdraw funds
-escrowRoutes.post("/wallets/:userId/withdraw", withdrawHandler);
+escrowRoutes.post("/wallets/:userId/withdraw", financialRateLimit, withdrawHandler);
 
 // POST /escrow/wallets/:userId/lock       — lock funds for a duel (admin only)
 escrowRoutes.post("/wallets/:userId/lock", adminMiddleware, lockFundsHandler);

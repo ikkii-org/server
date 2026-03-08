@@ -1,6 +1,6 @@
 import { db } from "../../../db";
 import { duels, users, games, gameProfiles, portfolio } from "../../../db/schema";
-import { eq, and, lt, sql, desc } from "drizzle-orm";
+import { eq, and, lt, sql, desc, isNull } from "drizzle-orm";
 import type { DuelStatus } from "../types/duel.types";
 import type { Duel, DuelSubmitResult } from "../models/duel.model";
 import { publish, CHANNELS } from "../../../services/pubsub.service";
@@ -213,8 +213,15 @@ export async function joinDuel(
             player2GameProfileId,
             status: "ACTIVE",
         })
-        .where(eq(duels.id, duelId))
+        .where(and(
+            eq(duels.id, duelId),
+            eq(duels.status, "OPEN")
+        ))
         .returning();
+
+    if (!updated) {
+        throw new Error("Duel is no longer available for joining");
+    }
 
     const mapped = mapRow(updated);
 
@@ -247,20 +254,27 @@ export async function submitResult(
     }
 
     const update: Partial<typeof duels.$inferInsert> = {};
+    const whereConditions = [eq(duels.id, duelId)];
 
     if (username === duel.player1Username) {
         if (duel.player1SubmittedWinner) throw new Error("Player 1 has already submitted a result");
         update.player1SubmittedWinner = claimedWinnerUsername;
+        whereConditions.push(isNull(duels.player1SubmittedWinner));
     } else {
         if (duel.player2SubmittedWinner) throw new Error("Player 2 has already submitted a result");
         update.player2SubmittedWinner = claimedWinnerUsername;
+        whereConditions.push(isNull(duels.player2SubmittedWinner));
     }
 
     const [updated] = await db
         .update(duels)
         .set(update)
-        .where(eq(duels.id, duelId))
+        .where(and(...whereConditions))
         .returning();
+
+    if (!updated) {
+        throw new Error("Result already submitted by this player");
+    }
 
     // Both players submitted — resolve
     if (updated.player1SubmittedWinner && updated.player2SubmittedWinner) {

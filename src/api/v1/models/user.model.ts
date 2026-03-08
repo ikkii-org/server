@@ -6,11 +6,11 @@ export interface PlayerProfile {
     losses: number;
     winPercentage: number;
     portfolio: {
-        solanaBalance: number;
+        solanaBalance: string;
         currentRank: number;
         previousRank: number;
-        totalStakeWon: number;
-        totalStakeLost: number;
+        totalStakeWon: string;
+        totalStakeLost: string;
     } | null;
 }
 

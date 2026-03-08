@@ -98,15 +98,27 @@ export async function updatePlayerPfp(username: string, pfp: string): Promise<Us
 }
 
 export async function recordWin(userId: string, stakeAmount: number): Promise<void> {
+    const [user] = await db.select({ username: users.username }).from(users).where(eq(users.id, userId));
+    
     await db.transaction(async (tx) => {
         await tx.update(users).set({ wins: sql`${users.wins} + 1`, updatedAt: new Date() }).where(eq(users.id, userId));
         await tx.update(portfolio).set({ totalStakeWon: sql`${portfolio.totalStakeWon} + ${stakeAmount}`, updatedAt: new Date() }).where(eq(portfolio.userId, userId));
     });
+    
+    if (user?.username) {
+        await del(CACHE_KEYS.USER_STATS(user.username));
+    }
 }
 
 export async function recordLoss(userId: string, stakeAmount: number): Promise<void> {
+    const [user] = await db.select({ username: users.username }).from(users).where(eq(users.id, userId));
+    
     await db.transaction(async (tx) => {
         await tx.update(users).set({ losses: sql`${users.losses} + 1`, updatedAt: new Date() }).where(eq(users.id, userId));
         await tx.update(portfolio).set({ totalStakeLost: sql`${portfolio.totalStakeLost} + ${stakeAmount}`, updatedAt: new Date() }).where(eq(portfolio.userId, userId));
     });
+    
+    if (user?.username) {
+        await del(CACHE_KEYS.USER_STATS(user.username));
+    }
 }

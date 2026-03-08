@@ -28,7 +28,7 @@ const pfpSchema = z
     .string()
     .max(MAX_PFP_LENGTH, "Image is too large (max ~2MB)")
     .regex(
-        /^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/]+=*$/,
+        /^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/,
         "Must be a base64 data URI (data:image/...;base64,...)"
     );
 
