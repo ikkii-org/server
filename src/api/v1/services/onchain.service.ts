@@ -321,6 +321,63 @@ export async function verifyCancelEscrowTx(txSig: string): Promise<boolean> {
     }
 }
 
+// ── Claim expired escrow ─────────────────────────────────────────────────────
+
+/**
+ * Claim an expired, unjoined escrow on-chain. The authority (server) signs
+ * this transaction so the player does NOT need to use their wallet.
+ * Funds are returned to player1's token account.
+ * Returns the Solana transaction signature.
+ */
+export async function claimExpiredOnChain(
+    duelUuid: string,
+    player1WalletKey: string,
+    duelTokenMint?: string,
+): Promise<string> {
+    const tag = `[claimExpiredOnChain][${duelUuid}]`;
+    const mint = duelTokenMint ? new PublicKey(duelTokenMint) : tokenMint;
+    const player1Pubkey = new PublicKey(player1WalletKey);
+    const duelIdBuf = duelIdToBuffer(duelUuid);
+
+    // For wSOL duels ensure player1's wSOL ATA exists before refunding into it
+    if (mint.equals(NATIVE_MINT)) {
+        const player1TokenAccount = getAssociatedTokenAddressSync(NATIVE_MINT, player1Pubkey);
+        try {
+            const setupTx = new Transaction();
+            setupTx.add(
+                createAssociatedTokenAccountIdempotentInstruction(
+                    authorityKeypair.publicKey,
+                    player1TokenAccount,
+                    player1Pubkey,
+                    NATIVE_MINT,
+                ),
+            );
+            const setupSig = await sendAndConfirmTransaction(solanaConnection, setupTx, [authorityKeypair]);
+            console.log(`${tag} wSOL ATA setup tx confirmed: ${setupSig}`);
+        } catch (setupErr) {
+            console.error(`${tag} wSOL ATA setup failed:`, setupErr);
+            throw new Error(`wSOL ATA setup failed: ${setupErr instanceof Error ? setupErr.message : String(setupErr)}`);
+        }
+    }
+
+    const player1TokenAccount = getAssociatedTokenAddressSync(mint, player1Pubkey);
+
+    try {
+        console.log(`${tag} Calling claimExpired — player1=${player1WalletKey}, mint=${mint.toBase58()}`);
+        const txSig = await escrowSdk.claimExpired(authorityKeypair, duelIdBuf, player1TokenAccount);
+        console.log(`${tag} claimExpired SUCCESS — tx: ${txSig}`);
+        return txSig;
+    } catch (err) {
+        const anchorCode = parseAnchorErrorCode(err);
+        if (anchorCode) {
+            console.error(`${tag} claimExpired FAILED with Anchor error ${anchorCode.code} (${anchorCode.name}):`, err);
+        } else {
+            console.error(`${tag} claimExpired FAILED:`, err);
+        }
+        throw err;
+    }
+}
+
 // ── Settle on-chain ──────────────────────────────────────────────────────────
 
 /**

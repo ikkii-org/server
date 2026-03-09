@@ -13,6 +13,7 @@ import {
     verifyCreateEscrowTx,
     verifyJoinEscrowTx,
     verifyCancelEscrowTx,
+    claimExpiredOnChain,
 } from "./onchain.service";
 
 export type { Duel, DuelSubmitResult };
@@ -468,6 +469,34 @@ export async function cancelDuel(duelId: string, username: string, txSignature?:
     // Publish cancellation event
     await publish(CHANNELS.DUEL_CANCELLED, "DUEL_CANCELLED", cancelledMapped);
 
+    return cancelledMapped;
+}
+
+/**
+ * Cancel an expired duel via the server authority (no user wallet needed).
+ * Calls claimExpired on-chain to refund player1, then marks the duel CANCELLED.
+ */
+export async function cancelExpiredDuel(duelId: string, username: string): Promise<Duel> {
+    const [duel] = await db.select().from(duels).where(eq(duels.id, duelId));
+    if (!duel) throw new Error("Duel not found");
+    if (duel.status !== "OPEN") throw new Error("Duel is not open");
+    if (username !== duel.player1Username) throw new Error("Only the creator can cancel the duel");
+    if (duel.player2Username !== null) throw new Error("Cannot cancel duel after another player has joined");
+    if (duel.expiresAt > new Date()) throw new Error("Duel has not expired yet — use the regular cancel");
+
+    // Fetch player1's wallet key for on-chain refund
+    const player1 = await requireUser(duel.player1Username);
+
+    const txSig = await claimExpiredOnChain(duelId, player1.walletKey, duel.tokenMint);
+
+    const [cancelled] = await db
+        .update(duels)
+        .set({ status: "CANCELLED", txSignature: txSig })
+        .where(eq(duels.id, duelId))
+        .returning();
+
+    const cancelledMapped = mapRow(cancelled);
+    await publish(CHANNELS.DUEL_CANCELLED, "DUEL_CANCELLED", cancelledMapped);
     return cancelledMapped;
 }
 

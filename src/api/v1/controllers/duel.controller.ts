@@ -4,6 +4,7 @@ import {
     joinDuel,
     submitResult,
     cancelDuel,
+    cancelExpiredDuel,
     getDuel,
     getDuelsByStatus,
     cleanUpExpiredDuels,
@@ -95,6 +96,22 @@ export async function cancelDuelHandler(c: Context) {
         return c.json({ duel }, 200);
     } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to cancel duel";
+        return c.json({ error: message }, 400);
+    }
+}
+
+export async function cancelExpiredDuelHandler(c: Context) {
+    try {
+        const duelIdResult = duelIdSchema.safeParse(c.req.param("id"));
+        if (!duelIdResult.success) {
+            return c.json({ error: duelIdResult.error.issues[0].message }, 400);
+        }
+
+        const username = c.get("username") as string;
+        const duel = await cancelExpiredDuel(duelIdResult.data, username);
+        return c.json({ duel }, 200);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to cancel expired duel";
         return c.json({ error: message }, 400);
     }
 }
