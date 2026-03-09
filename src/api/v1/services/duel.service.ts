@@ -15,6 +15,7 @@ import {
     verifyCancelEscrowTx,
     claimExpiredOnChain,
 } from "./onchain.service";
+import { escrowSdk } from "../../../config/solana";
 
 export type { Duel, DuelSubmitResult };
 
@@ -485,9 +486,25 @@ export async function cancelExpiredDuel(duelId: string, username: string): Promi
     if (duel.expiresAt > new Date()) throw new Error("Duel has not expired yet — use the regular cancel");
 
     // Fetch player1's wallet key for on-chain refund
-    const player1 = await requireUser(duel.player1Username);
+    const [player1] = await db.select().from(users).where(eq(users.username, duel.player1Username));
+    if (!player1) throw new Error("Player 1 not found");
+    let txSig = "already_cancelled_onchain";
 
-    const txSig = await claimExpiredOnChain(duelId, player1.walletKey, duel.tokenMint);
+    try {
+        // First check the on-chain status to avoid 6001 InvalidStatus
+        const duelIdBuf = Buffer.from(duelId.replace(/-/g, ""), "hex");
+        const escrowStr = await escrowSdk.fetchEscrow(duelIdBuf).catch(() => null);
+
+        if (escrowStr && ("open" in escrowStr.status)) {
+            // It's still Open on-chain, proceed with claiming it
+            txSig = await claimExpiredOnChain(duelId, player1.walletKey, duel.tokenMint);
+        } else {
+            console.log(`[cancelExpiredDuel] Escrow ${duelId} is no longer Open on-chain (status=${JSON.stringify(escrowStr?.status || "Not Found")}). Skipping claimExpired.`);
+        }
+    } catch (err) {
+        console.error(`[cancelExpiredDuel] Failed to process on-chain claim for ${duelId}:`, err);
+        throw err;
+    }
 
     const [cancelled] = await db
         .update(duels)
