@@ -8,7 +8,7 @@ services:
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/ikki
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/ikkii
       - REDIS_URL=redis://redis:6379
     volumes:
       - .:/app
@@ -19,7 +19,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - ikki-network
+      - ikkii-network
 
   db:
     image: postgres:16-alpine
@@ -28,7 +28,7 @@ services:
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=ikki
+      - POSTGRES_DB=ikkii
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -37,7 +37,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - ikki-network
+      - ikkii-network
 
   redis:
     image: redis:7-alpine
@@ -54,10 +54,10 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - ikki-network
+      - ikkii-network
 
 networks:
-  ikki-network:
+  ikkii-network:
     driver: bridge
 
 volumes:

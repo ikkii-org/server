@@ -29,8 +29,10 @@ export const env = {
     SOLANA_RPC_URL: requireEnv("SOLANA_RPC_URL"),
     /** JSON-encoded 64-byte authority keypair array */
     SOLANA_AUTHORITY_KEY: requireEnv("SOLANA_AUTHORITY_KEY"),
-    /** Deployed escrow program ID */
+    /** Deployed escrow program ID (v1) */
     ESCROW_PROGRAM_ID: requireEnv("ESCROW_PROGRAM_ID"),
+    /** Deployed escrow v2 program ID */
+    ESCROW_V2_PROGRAM_ID: requireEnv("ESCROW_V2_PROGRAM_ID"),
     /** Treasury wallet public key (receives platform fees) */
     TREASURY_PUBKEY: requireEnv("TREASURY_PUBKEY"),
     /** SPL token mint address for duels (e.g. devnet USDC) */

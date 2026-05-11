@@ -1,6 +1,6 @@
-# Ikki Backend
+# Ikkii Backend
 
-This repo contains server side logic of our application, ikki.
+This repo contains server side logic of our application, ikkii.
 
 ## Stack
 

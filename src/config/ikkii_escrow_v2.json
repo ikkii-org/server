@@ -1,17 +1,14 @@
 {
-  "address": "7rP4rHKBqnYGB2UgpeRtd9f3FZ1PHwfc4iPVhWRv9UP4",
+  "address": "4T3bc2eimNKACT9FxTJaySC5jzqaBLct8Zo4BDjprnN2",
   "metadata": {
-    "name": "ikki_escrow",
-    "version": "0.1.0",
+    "name": "ikkii_escrow_v2",
+    "version": "0.2.0",
     "spec": "0.1.0",
-    "description": "Ikki platform on-chain escrow for competitive gaming duels"
+    "description": "Ikkii platform on-chain escrow v2 — NFT + Token-2022 support"
   },
   "instructions": [
     {
       "name": "cancel_escrow",
-      "docs": [
-        "Player 1 cancels an open escrow (before anyone joins)."
-      ],
       "discriminator": [
         156,
         203,
@@ -47,7 +44,7 @@
               {
                 "kind": "account",
                 "path": "escrow.duel_id",
-                "account": "EscrowAccount"
+                "account": "EscrowAccountV2"
               }
             ]
           }
@@ -70,30 +67,23 @@
               {
                 "kind": "account",
                 "path": "escrow.duel_id",
-                "account": "EscrowAccount"
+                "account": "EscrowAccountV2"
               }
             ]
           }
         },
         {
           "name": "player1_token_account",
-          "docs": [
-            "Player 1's token account (receives refund)"
-          ],
           "writable": true
         },
         {
-          "name": "token_program",
-          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+          "name": "token_program"
         }
       ],
       "args": []
     },
     {
       "name": "claim_expired",
-      "docs": [
-        "Permissionless crank: anyone can claim an expired Open escrow to refund player1."
-      ],
       "discriminator": [
         124,
         78,
@@ -107,9 +97,6 @@
       "accounts": [
         {
           "name": "cranker",
-          "docs": [
-            "Anyone can crank this — no signer constraint on identity"
-          ],
           "writable": true,
           "signer": true
         },
@@ -132,7 +119,7 @@
               {
                 "kind": "account",
                 "path": "escrow.duel_id",
-                "account": "EscrowAccount"
+                "account": "EscrowAccountV2"
               }
             ]
           }
@@ -155,30 +142,102 @@
               {
                 "kind": "account",
                 "path": "escrow.duel_id",
-                "account": "EscrowAccount"
+                "account": "EscrowAccountV2"
               }
             ]
           }
         },
         {
           "name": "player1_token_account",
-          "docs": [
-            "Player 1's token account (receives refund)"
-          ],
           "writable": true
         },
         {
-          "name": "token_program",
-          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+          "name": "token_program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "claim_expired_active",
+      "discriminator": [
+        73,
+        70,
+        137,
+        1,
+        14,
+        34,
+        117,
+        7
+      ],
+      "accounts": [
+        {
+          "name": "cranker",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow.duel_id",
+                "account": "EscrowAccountV2"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow.duel_id",
+                "account": "EscrowAccountV2"
+              }
+            ]
+          }
+        },
+        {
+          "name": "player1_token_account",
+          "writable": true
+        },
+        {
+          "name": "player2_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_program"
         }
       ],
       "args": []
     },
     {
       "name": "create_escrow",
-      "docs": [
-        "Player 1 creates an escrow and deposits their stake into the vault."
-      ],
       "discriminator": [
         253,
         215,
@@ -219,22 +278,16 @@
           }
         },
         {
-          "name": "token_mint",
-          "docs": [
-            "The SPL token mint for the duel (e.g. SKR)"
-          ]
+          "name": "token_mint"
         },
         {
           "name": "player1_token_account",
-          "docs": [
-            "Player 1's token account (source of stake)"
-          ],
           "writable": true
         },
         {
           "name": "vault",
           "docs": [
-            "PDA-owned vault to hold escrowed tokens"
+            "Vault PDA — created and initialized manually in the instruction"
           ],
           "writable": true,
           "pda": {
@@ -258,15 +311,117 @@
         },
         {
           "name": "token_program",
-          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+          "docs": [
+            "Token program: SPL Token or Token-2022"
+          ]
         },
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "duel_id",
+          "type": {
+            "array": [
+              "u8",
+              16
+            ]
+          }
         },
         {
-          "name": "rent",
-          "address": "SysvarRent111111111111111111111111111111111"
+          "name": "stake_amount",
+          "type": "u64"
+        },
+        {
+          "name": "expiry",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "create_nft_escrow",
+      "discriminator": [
+        221,
+        77,
+        204,
+        186,
+        69,
+        47,
+        25,
+        106
+      ],
+      "accounts": [
+        {
+          "name": "player1",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "duel_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_mint"
+        },
+        {
+          "name": "player1_token_account",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "docs": [
+            "Vault PDA — created and initialized manually in the instruction"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "duel_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "docs": [
+            "Token program: SPL Token or Token-2022"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
@@ -291,9 +446,6 @@
     },
     {
       "name": "dispute_escrow",
-      "docs": [
-        "Authority marks an active escrow as disputed."
-      ],
       "discriminator": [
         198,
         174,
@@ -358,7 +510,7 @@
               {
                 "kind": "account",
                 "path": "escrow.duel_id",
-                "account": "EscrowAccount"
+                "account": "EscrowAccountV2"
               }
             ]
           }
@@ -368,9 +520,6 @@
     },
     {
       "name": "initialize_platform",
-      "docs": [
-        "One-time initialisation: create the singleton PlatformConfig."
-      ],
       "discriminator": [
         119,
         201,
@@ -432,9 +581,6 @@
     },
     {
       "name": "join_escrow",
-      "docs": [
-        "Player 2 joins the escrow and deposits their matching stake."
-      ],
       "discriminator": [
         205,
         250,
@@ -470,23 +616,17 @@
               {
                 "kind": "account",
                 "path": "escrow.duel_id",
-                "account": "EscrowAccount"
+                "account": "EscrowAccountV2"
               }
             ]
           }
         },
         {
           "name": "player2_token_account",
-          "docs": [
-            "Player 2's token account (source of stake)"
-          ],
           "writable": true
         },
         {
           "name": "vault",
-          "docs": [
-            "The vault holding escrowed tokens"
-          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -503,23 +643,19 @@
               {
                 "kind": "account",
                 "path": "escrow.duel_id",
-                "account": "EscrowAccount"
+                "account": "EscrowAccountV2"
               }
             ]
           }
         },
         {
-          "name": "token_program",
-          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+          "name": "token_program"
         }
       ],
       "args": []
     },
     {
       "name": "resolve_dispute",
-      "docs": [
-        "Authority resolves a disputed escrow: same payout logic as settle."
-      ],
       "discriminator": [
         231,
         6,
@@ -584,7 +720,7 @@
               {
                 "kind": "account",
                 "path": "escrow.duel_id",
-                "account": "EscrowAccount"
+                "account": "EscrowAccountV2"
               }
             ]
           }
@@ -607,28 +743,21 @@
               {
                 "kind": "account",
                 "path": "escrow.duel_id",
-                "account": "EscrowAccount"
+                "account": "EscrowAccountV2"
               }
             ]
           }
         },
         {
           "name": "winner_token_account",
-          "docs": [
-            "Winner's token account"
-          ],
           "writable": true
         },
         {
           "name": "treasury_token_account",
-          "docs": [
-            "Treasury token account for fee"
-          ],
           "writable": true
         },
         {
-          "name": "token_program",
-          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+          "name": "token_program"
         }
       ],
       "args": [
@@ -640,10 +769,6 @@
     },
     {
       "name": "settle_escrow",
-      "docs": [
-        "Authority settles an active escrow: winner receives pot minus fee,",
-        "treasury receives the fee."
-      ],
       "discriminator": [
         22,
         135,
@@ -657,9 +782,6 @@
       "accounts": [
         {
           "name": "authority",
-          "docs": [
-            "Platform authority (backend signer)"
-          ],
           "signer": true,
           "relations": [
             "platform_config"
@@ -711,16 +833,13 @@
               {
                 "kind": "account",
                 "path": "escrow.duel_id",
-                "account": "EscrowAccount"
+                "account": "EscrowAccountV2"
               }
             ]
           }
         },
         {
           "name": "vault",
-          "docs": [
-            "Vault holding the escrowed tokens"
-          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -737,28 +856,21 @@
               {
                 "kind": "account",
                 "path": "escrow.duel_id",
-                "account": "EscrowAccount"
+                "account": "EscrowAccountV2"
               }
             ]
           }
         },
         {
           "name": "winner_token_account",
-          "docs": [
-            "Winner's token account to receive payout"
-          ],
           "writable": true
         },
         {
           "name": "treasury_token_account",
-          "docs": [
-            "Treasury token account to receive platform fee"
-          ],
           "writable": true
         },
         {
-          "name": "token_program",
-          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+          "name": "token_program"
         }
       ],
       "args": [
@@ -770,9 +882,6 @@
     },
     {
       "name": "update_platform",
-      "docs": [
-        "Update fee or treasury (authority only)."
-      ],
       "discriminator": [
         46,
         78,
@@ -838,16 +947,16 @@
   ],
   "accounts": [
     {
-      "name": "EscrowAccount",
+      "name": "EscrowAccountV2",
       "discriminator": [
-        36,
-        69,
-        48,
-        18,
-        128,
-        225,
-        125,
-        135
+        183,
+        99,
+        147,
+        83,
+        8,
+        97,
+        77,
+        9
       ]
     },
     {
@@ -861,6 +970,86 @@
         83,
         230,
         160
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "EscrowCancelled",
+      "discriminator": [
+        98,
+        241,
+        195,
+        122,
+        213,
+        0,
+        162,
+        161
+      ]
+    },
+    {
+      "name": "EscrowCreated",
+      "discriminator": [
+        70,
+        127,
+        105,
+        102,
+        92,
+        97,
+        7,
+        173
+      ]
+    },
+    {
+      "name": "EscrowDisputed",
+      "discriminator": [
+        132,
+        73,
+        81,
+        200,
+        177,
+        51,
+        128,
+        18
+      ]
+    },
+    {
+      "name": "EscrowJoined",
+      "discriminator": [
+        175,
+        173,
+        48,
+        61,
+        222,
+        19,
+        126,
+        85
+      ]
+    },
+    {
+      "name": "EscrowResolved",
+      "discriminator": [
+        91,
+        111,
+        193,
+        4,
+        183,
+        36,
+        78,
+        31
+      ]
+    },
+    {
+      "name": "EscrowSettled",
+      "discriminator": [
+        97,
+        27,
+        150,
+        55,
+        203,
+        179,
+        173,
+        23
       ]
     }
   ],
@@ -919,22 +1108,36 @@
       "code": 6010,
       "name": "ExpiryInPast",
       "msg": "Expiry timestamp must be in the future"
+    },
+    {
+      "code": 6011,
+      "name": "ExpiryTooFar",
+      "msg": "Expiry timestamp is too far in the future (max 30 days)"
+    },
+    {
+      "code": 6012,
+      "name": "InvalidTreasury",
+      "msg": "Invalid treasury address"
+    },
+    {
+      "code": 6013,
+      "name": "InvalidTokenProgram",
+      "msg": "Token program must be SPL Token or Token-2022"
+    },
+    {
+      "code": 6014,
+      "name": "NotAnNft",
+      "msg": "Mint is not a valid NFT (supply must be 1, decimals must be 0)"
     }
   ],
   "types": [
     {
-      "name": "EscrowAccount",
-      "docs": [
-        "Per-duel escrow account. Seeds: [\"escrow\", duel_id]."
-      ],
+      "name": "EscrowAccountV2",
       "type": {
         "kind": "struct",
         "fields": [
           {
             "name": "duel_id",
-            "docs": [
-              "Matches the off-chain duel UUID (16 bytes)"
-            ],
             "type": {
               "array": [
                 "u8",
@@ -944,37 +1147,22 @@
           },
           {
             "name": "player1",
-            "docs": [
-              "Player 1 (creator) public key"
-            ],
             "type": "pubkey"
           },
           {
             "name": "player2",
-            "docs": [
-              "Player 2 (joiner) public key — default (all zeros) when Open"
-            ],
             "type": "pubkey"
           },
           {
             "name": "stake_amount",
-            "docs": [
-              "Stake per player in token smallest units"
-            ],
             "type": "u64"
           },
           {
             "name": "token_mint",
-            "docs": [
-              "SPL token mint address (e.g. SKR token)"
-            ],
             "type": "pubkey"
           },
           {
             "name": "status",
-            "docs": [
-              "Current escrow lifecycle status"
-            ],
             "type": {
               "defined": {
                 "name": "EscrowStatus"
@@ -983,24 +1171,155 @@
           },
           {
             "name": "winner",
-            "docs": [
-              "Winner public key — default (all zeros) until settled"
-            ],
             "type": "pubkey"
           },
           {
             "name": "expiry",
-            "docs": [
-              "Unix timestamp after which an Open escrow can be reclaimed"
-            ],
             "type": "i64"
           },
           {
             "name": "bump",
-            "docs": [
-              "PDA bump seed"
-            ],
             "type": "u8"
+          },
+          {
+            "name": "is_nft",
+            "type": "bool"
+          },
+          {
+            "name": "token_program_id",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EscrowCancelled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "duel_id",
+            "type": "string"
+          },
+          {
+            "name": "refunded_amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EscrowCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "duel_id",
+            "type": "string"
+          },
+          {
+            "name": "player1",
+            "type": "pubkey"
+          },
+          {
+            "name": "stake_amount",
+            "type": "u64"
+          },
+          {
+            "name": "token_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "is_nft",
+            "type": "bool"
+          },
+          {
+            "name": "expiry",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EscrowDisputed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "duel_id",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EscrowJoined",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "duel_id",
+            "type": "string"
+          },
+          {
+            "name": "player2",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EscrowResolved",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "duel_id",
+            "type": "string"
+          },
+          {
+            "name": "winner",
+            "type": "pubkey"
+          },
+          {
+            "name": "payout",
+            "type": "u64"
+          },
+          {
+            "name": "fee",
+            "type": "u64"
+          },
+          {
+            "name": "is_nft",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EscrowSettled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "duel_id",
+            "type": "string"
+          },
+          {
+            "name": "winner",
+            "type": "pubkey"
+          },
+          {
+            "name": "payout",
+            "type": "u64"
+          },
+          {
+            "name": "fee",
+            "type": "u64"
+          },
+          {
+            "name": "is_nft",
+            "type": "bool"
           }
         ]
       }
@@ -1030,38 +1349,23 @@
     },
     {
       "name": "PlatformConfig",
-      "docs": [
-        "Singleton platform configuration. Seeds: [\"platform_config\"]."
-      ],
       "type": {
         "kind": "struct",
         "fields": [
           {
             "name": "authority",
-            "docs": [
-              "Admin / backend authority that can settle duels"
-            ],
             "type": "pubkey"
           },
           {
             "name": "fee_bps",
-            "docs": [
-              "Platform fee in basis points (e.g. 250 = 2.5%)"
-            ],
             "type": "u16"
           },
           {
             "name": "treasury",
-            "docs": [
-              "Treasury wallet that receives platform fees"
-            ],
             "type": "pubkey"
           },
           {
             "name": "bump",
-            "docs": [
-              "PDA bump"
-            ],
             "type": "u8"
           }
         ]
