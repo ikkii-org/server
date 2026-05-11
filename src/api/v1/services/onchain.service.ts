@@ -30,6 +30,7 @@ import { db } from "../../../db";
 import { gameProfiles, users } from "../../../db/schema";
 import { eq } from "drizzle-orm";
 import { verifyMatchBetweenPlayers } from "./clash-royale.service";
+import { verifyMatchBetweenPlayers as verifyChessComMatch } from "./chess-com.service";
 
 // ── Anchor error code map (from IDL) ────────────────────────────────────────
 
@@ -635,7 +636,7 @@ export async function resolveDisputeOnChain(
  */
 export async function verifyWinnerViaGameApi(
     apiBaseUrl: string,
-    apiKey: string,
+    apiKey: string | null,
     gameName: string,
     duelId: string,
     player1GameProfileId: string | null,
@@ -647,6 +648,14 @@ export async function verifyWinnerViaGameApi(
             return await verifyClashRoyaleMatch(
                 apiBaseUrl,
                 apiKey,
+                player1GameProfileId,
+                player2GameProfileId,
+            );
+        }
+
+        if (gameName.toLowerCase() === "chess.com") {
+            return await verifyChessComDuel(
+                apiBaseUrl,
                 player1GameProfileId,
                 player2GameProfileId,
             );
@@ -669,10 +678,14 @@ export async function verifyWinnerViaGameApi(
  */
 async function verifyClashRoyaleMatch(
     apiBaseUrl: string,
-    apiKey: string,
+    apiKey: string | null,
     player1GameProfileId: string | null,
     player2GameProfileId: string | null,
 ): Promise<string | null> {
+    if (!apiKey) {
+        console.warn("Clash Royale API key not available");
+        return null;
+    }
     if (!player1GameProfileId || !player2GameProfileId) {
         console.warn("Missing game profile IDs for Clash Royale verification");
         return null;
@@ -710,6 +723,76 @@ async function verifyClashRoyaleMatch(
 
     // Map winner tag back to username
     const winnerProfileId = result.winner === profile1.playerId
+        ? player1GameProfileId
+        : player2GameProfileId;
+
+    const [winnerProfile] = await db
+        .select({ userId: gameProfiles.userId })
+        .from(gameProfiles)
+        .where(eq(gameProfiles.id, winnerProfileId));
+
+    if (!winnerProfile) return null;
+
+    const [winner] = await db
+        .select({ username: users.username })
+        .from(users)
+        .where(eq(users.id, winnerProfile.userId));
+
+    return winner?.username ?? null;
+}
+
+// ── Chess.com Verification ───────────────────────────────────────────────────
+
+/**
+ * Verify a Chess.com match between two players.
+ * Looks up their usernames from gameProfiles and checks recent game archives.
+ */
+async function verifyChessComDuel(
+    apiBaseUrl: string,
+    player1GameProfileId: string | null,
+    player2GameProfileId: string | null,
+): Promise<string | null> {
+    if (!player1GameProfileId || !player2GameProfileId) {
+        console.warn("Missing game profile IDs for Chess.com verification");
+        return null;
+    }
+
+    // Get player usernames from game profiles
+    const [profile1] = await db
+        .select()
+        .from(gameProfiles)
+        .where(eq(gameProfiles.id, player1GameProfileId));
+
+    const [profile2] = await db
+        .select()
+        .from(gameProfiles)
+        .where(eq(gameProfiles.id, player2GameProfileId));
+
+    if (!profile1?.playerId || !profile2?.playerId) {
+        console.warn("One or both players missing Chess.com username");
+        return null;
+    }
+
+    // Call Chess.com API to verify match (24h window for daily chess support)
+    const result = await verifyChessComMatch(
+        apiBaseUrl,
+        profile1.playerId,
+        profile2.playerId,
+        24 * 60, // 24 hours
+    );
+
+    if (!result.verified) {
+        console.warn(`Chess.com verification: ${result.reason}`);
+        return null;
+    }
+
+    if (!result.winner) {
+        console.warn("Chess.com match ended in a draw");
+        return null;
+    }
+
+    // Map winner username back to ikki username
+    const winnerProfileId = result.winner.toLowerCase() === profile1.playerId.toLowerCase()
         ? player1GameProfileId
         : player2GameProfileId;
 

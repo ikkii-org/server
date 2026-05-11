@@ -40,5 +40,7 @@ export const env = {
 
     // ── Game Integrations ───────────────────────────────────────────────────
     /** Clash Royale Bearer JWT token from developer.clashroyale.com */
-    CLASH_ROYALE_TOKEN: requireEnv("CLASH_ROYALE_TOKEN")
+    CLASH_ROYALE_TOKEN: requireEnv("CLASH_ROYALE_TOKEN"),
+    /** Chess.com PubAPI User-Agent (must contain contact info per their TOS) */
+    CHESS_COM_USER_AGENT: process.env.CHESS_COM_USER_AGENT ?? "",
 } as const;

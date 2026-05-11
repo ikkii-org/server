@@ -29,6 +29,11 @@ const GAMES_TO_SEED = [
         icon: "https://cdn-icons-png.flaticon.com/512/3408/3408478.png",
         apiBaseUrl: null,
     },
+    {
+        name: "Chess.com",
+        icon: "https://cdn-icons-png.flaticon.com/512/5968/5968906.png",
+        apiBaseUrl: "https://api.chess.com/pub",
+    },
 ];
 
 async function seed() {
