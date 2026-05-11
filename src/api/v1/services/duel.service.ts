@@ -15,7 +15,7 @@ import {
     verifyCancelEscrowTx,
     claimExpiredOnChain,
 } from "./onchain.service";
-import { escrowSdk } from "../../../config/solana";
+import { escrowSdk, escrowSdkV2 } from "../../../config/solana";
 
 export type { Duel, DuelSubmitResult };
 
@@ -44,6 +44,7 @@ function mapRow(row: DuelRow): Duel {
         txSignature: row.txSignature ?? null,
         expiresAt: row.expiresAt,
         createdAt: row.createdAt,
+        isNft: row.isNft ?? false,
     };
 }
 
@@ -103,6 +104,7 @@ export async function createDuel(
     expiresInMs: number = 30 * 60 * 1000,
     txSignature?: string,
     duelId?: string,
+    isNft: boolean = false,
 ): Promise<Duel> {
     if (!player1Username) throw new Error("Player username is required");
     if (stakeAmount <= 0) throw new Error("Stake amount must be greater than 0");
@@ -111,7 +113,7 @@ export async function createDuel(
     if (!duelId) throw new Error("Duel ID is required from the frontend");
 
     // 1. Verify the Escrow Creation transaction on-chain
-    const isValidTx = await verifyCreateEscrowTx(txSignature, duelId, stakeAmountSmallest);
+    const isValidTx = await verifyCreateEscrowTx(txSignature, duelId, stakeAmountSmallest, isNft);
     if (!isValidTx) {
         throw new Error("Invalid or unverified transaction signature");
     }
@@ -150,6 +152,7 @@ export async function createDuel(
             gameId: gameId ?? null,
             player1GameProfileId,
             expiresAt: new Date(Date.now() + expiresInMs),
+            isNft,
         })
         .returning();
 
@@ -177,7 +180,7 @@ export async function joinDuel(
     if (!txSignature) throw new Error("Transaction signature is required for on-chain verification");
 
     // 1. Verify the Join Escrow transaction on-chain (with PDA check)
-    const isValidTx = await verifyJoinEscrowTx(txSignature, duelId);
+    const isValidTx = await verifyJoinEscrowTx(txSignature, duelId, duel.isNft ?? false);
     if (!isValidTx) {
         throw new Error("Invalid or unverified transaction signature");
     }
@@ -298,7 +301,7 @@ export async function submitResult(
             let settleError: unknown = null;
             for (let attempt = 1; attempt <= 3; attempt++) {
                 try {
-                    txSignature = await settleOnChain(duelId, winner.walletKey, updated.tokenMint);
+                    txSignature = await settleOnChain(duelId, winner.walletKey, updated.tokenMint, updated.isNft ?? false);
                     settleError = null;
                     break;
                 } catch (err) {
@@ -360,7 +363,7 @@ export async function submitResult(
             // Dispute — mark on-chain, then attempt game API auto-resolution
             let disputeTxSig: string | null = null;
             try {
-                disputeTxSig = await disputeOnChain(duelId);
+                disputeTxSig = await disputeOnChain(duelId, updated.isNft ?? false);
             } catch (err) {
                 console.error(`On-chain dispute failed for duel ${duelId}:`, err);
                 throw new Error("On-chain dispute marking failed.");
@@ -394,7 +397,7 @@ export async function submitResult(
                         if (verifiedWinner) {
                             const verifiedUser = await requireUser(verifiedWinner);
 
-                            const resolveTxSig = await resolveDisputeOnChain(duelId, verifiedUser.walletKey, disputed.tokenMint);
+                            const resolveTxSig = await resolveDisputeOnChain(duelId, verifiedUser.walletKey, disputed.tokenMint, disputed.isNft ?? false);
 
                             const loserUsername =
                                 verifiedWinner === disputed.player1Username
@@ -454,7 +457,7 @@ export async function cancelDuel(duelId: string, username: string, txSignature?:
     if (!txSignature) throw new Error("Transaction signature is required for on-chain verification");
 
     // Verify the cancel transaction on-chain
-    const isValidTx = await verifyCancelEscrowTx(txSignature);
+    const isValidTx = await verifyCancelEscrowTx(txSignature, duel.isNft ?? false);
     if (!isValidTx) {
         throw new Error("Invalid or unverified cancel transaction signature");
     }
@@ -493,11 +496,12 @@ export async function cancelExpiredDuel(duelId: string, username: string): Promi
     try {
         // First check the on-chain status to avoid 6001 InvalidStatus
         const duelIdBuf = Buffer.from(duelId.replace(/-/g, ""), "hex");
-        const escrowStr = await escrowSdk.fetchEscrow(duelIdBuf).catch(() => null);
+        const sdk = (duel.isNft ?? false) ? escrowSdkV2 : escrowSdk;
+        const escrowStr = await sdk.fetchEscrow(duelIdBuf).catch(() => null);
 
         if (escrowStr && ("open" in escrowStr.status)) {
             // It's still Open on-chain, proceed with claiming it
-            txSig = await claimExpiredOnChain(duelId, player1.walletKey, duel.tokenMint);
+            txSig = await claimExpiredOnChain(duelId, player1.walletKey, duel.tokenMint, duel.isNft ?? false);
         } else {
             console.log(`[cancelExpiredDuel] Escrow ${duelId} is no longer Open on-chain (status=${JSON.stringify(escrowStr?.status || "Not Found")}). Skipping claimExpired.`);
         }

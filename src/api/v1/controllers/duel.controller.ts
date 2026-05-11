@@ -24,8 +24,8 @@ export async function createDuelHandler(c: Context) {
             return c.json({ error: result.error.issues[0].message }, 400);
         }
 
-        const { stakeAmount, stakeAmountSmallest, tokenMint, gameId, expiresInMs, txSignature, duelId } = result.data;
-        const duel = await createDuel(username, stakeAmount, stakeAmountSmallest, tokenMint, gameId, expiresInMs, txSignature, duelId);
+        const { stakeAmount, stakeAmountSmallest, tokenMint, gameId, expiresInMs, txSignature, duelId, isNft } = result.data;
+        const duel = await createDuel(username, stakeAmount, stakeAmountSmallest, tokenMint, gameId, expiresInMs, txSignature, duelId, isNft);
         return c.json({ duel }, 201);
     } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to create duel";

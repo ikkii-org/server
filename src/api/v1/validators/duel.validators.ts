@@ -17,6 +17,7 @@ export const createDuelSchema = z.object({
     expiresInMs: z.number().positive().optional(),
     txSignature: z.string().min(1, "Transaction signature is required"),
     duelId: z.string().uuid("Invalid duel ID"),
+    isNft: z.boolean().optional().default(false),
 });
 
 export const joinDuelSchema = z.object({
