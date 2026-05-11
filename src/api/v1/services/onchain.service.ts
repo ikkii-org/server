@@ -15,12 +15,14 @@ import {
 } from "@solana/spl-token";
 import {
     escrowSdk,
+    escrowSdkV2,
     authorityKeypair,
     treasuryPubkey,
     tokenMint,
     uuidToBytes,
     solanaConnection,
     programId,
+    programIdV2,
     findEscrowPDA,
 } from "../../../config/solana";
 import bs58 from "bs58";
@@ -87,8 +89,11 @@ async function logSettleDiagnostics(
     duelUuid: string,
     winnerPubkey: PublicKey,
     mint: PublicKey,
+    isNft = false,
 ): Promise<void> {
     const tag = `[settleOnChain:diag][${duelUuid}]`;
+    const targetProgramId = isNft ? programIdV2 : programId;
+    const sdk = isNft ? escrowSdkV2 : escrowSdk;
     try {
         // 1. Authority SOL balance
         const balance = await solanaConnection.getBalance(authorityKeypair.publicKey);
@@ -100,11 +105,11 @@ async function logSettleDiagnostics(
 
         // 2. Fetch on-chain escrow state
         const duelIdBuf = uuidToBytes(duelUuid);
-        const [escrowPDA] = findEscrowPDA(duelIdBuf, programId);
+        const [escrowPDA] = findEscrowPDA(duelIdBuf, targetProgramId);
         console.log(`${tag} Escrow PDA: ${escrowPDA.toBase58()}`);
 
         try {
-            const escrowAccount = await escrowSdk.fetchEscrow(duelIdBuf);
+            const escrowAccount = await sdk.fetchEscrow(duelIdBuf);
             const statusNum = typeof escrowAccount.status === "object"
                 ? Object.keys(escrowAccount.status)[0]
                 : escrowAccount.status;
@@ -166,7 +171,9 @@ export async function verifyCreateEscrowTx(
     txSig: string,
     expectedDuelId: string,
     expectedStakeAmountSmallest: number,
+    isNft = false,
 ): Promise<boolean> {
+    const targetProgramId = isNft ? programIdV2 : programId;
     try {
         const tx = await solanaConnection.getParsedTransaction(txSig, {
             maxSupportedTransactionVersion: 0,
@@ -185,7 +192,7 @@ export async function verifyCreateEscrowTx(
 
         // Find the instruction calling our Escrow Program
         const ix = tx.transaction.message.instructions.find(
-            (i: any) => i.programId.equals(programId)
+            (i: any) => i.programId.equals(targetProgramId)
         );
 
         if (!ix) {
@@ -195,10 +202,12 @@ export async function verifyCreateEscrowTx(
 
         // In a parsed tx, if it can't parse the custom program data, it falls back to PartiallyDecodedInstruction
         if ("data" in ix) {
-            // Discriminator for create_escrow is [253, 215, 165, 116, 36, 108, 68, 80]
             const dataBuf = Buffer.from(bs58.decode(ix.data));
             const discriminator = dataBuf.subarray(0, 8);
-            const expectedDiscriminator = Buffer.from([253, 215, 165, 116, 36, 108, 68, 80]);
+
+            const expectedDiscriminator = isNft
+                ? Buffer.from([221, 77, 204, 186, 69, 47, 25, 106]) // create_nft_escrow
+                : Buffer.from([253, 215, 165, 116, 36, 108, 68, 80]); // create_escrow
 
             if (!discriminator.equals(expectedDiscriminator)) {
                 console.error(`[verifyCreateEscrowTx] Invalid instruction discriminator in tx: ${txSig}`);
@@ -246,7 +255,8 @@ export async function verifyCreateEscrowTx(
  * Also checks that the escrow PDA in the transaction matches the expected duelId,
  * preventing replay of a valid join tx from a different duel.
  */
-export async function verifyJoinEscrowTx(txSig: string, expectedDuelId?: string): Promise<boolean> {
+export async function verifyJoinEscrowTx(txSig: string, expectedDuelId?: string, isNft = false): Promise<boolean> {
+    const targetProgramId = isNft ? programIdV2 : programId;
     try {
         const tx = await solanaConnection.getParsedTransaction(txSig, {
             maxSupportedTransactionVersion: 0,
@@ -256,7 +266,7 @@ export async function verifyJoinEscrowTx(txSig: string, expectedDuelId?: string)
         if (!tx || tx.meta?.err) return false;
 
         const ix = tx.transaction.message.instructions.find(
-            (i: any) => i.programId.equals(programId)
+            (i: any) => i.programId.equals(targetProgramId)
         ) as any;
 
         if (!ix || !("data" in ix)) return false;
@@ -273,7 +283,7 @@ export async function verifyJoinEscrowTx(txSig: string, expectedDuelId?: string)
             const duelIdBuf = uuidToBytes(expectedDuelId);
             const [expectedEscrowPda] = PublicKey.findProgramAddressSync(
                 [Buffer.from("escrow"), duelIdBuf],
-                programId,
+                targetProgramId,
             );
             // The escrow PDA is the second account in the join_escrow instruction
             const actualEscrowPda: PublicKey = ix.accounts[1];
@@ -294,7 +304,8 @@ export async function verifyJoinEscrowTx(txSig: string, expectedDuelId?: string)
  * Verify a Mobile Wallet Adapter cancel_escrow transaction signature.
  * The cancel is signed by player1 (the duel creator), not the authority.
  */
-export async function verifyCancelEscrowTx(txSig: string): Promise<boolean> {
+export async function verifyCancelEscrowTx(txSig: string, isNft = false): Promise<boolean> {
+    const targetProgramId = isNft ? programIdV2 : programId;
     try {
         const tx = await solanaConnection.getParsedTransaction(txSig, {
             maxSupportedTransactionVersion: 0,
@@ -304,7 +315,7 @@ export async function verifyCancelEscrowTx(txSig: string): Promise<boolean> {
         if (!tx || tx.meta?.err) return false;
 
         const ix = tx.transaction.message.instructions.find(
-            (i: any) => i.programId.equals(programId)
+            (i: any) => i.programId.equals(targetProgramId)
         );
 
         if (!ix || !("data" in ix)) return false;
@@ -333,6 +344,7 @@ export async function claimExpiredOnChain(
     duelUuid: string,
     player1WalletKey: string,
     duelTokenMint?: string,
+    isNft = false,
 ): Promise<string> {
     const tag = `[claimExpiredOnChain][${duelUuid}]`;
     const mint = duelTokenMint ? new PublicKey(duelTokenMint) : tokenMint;
@@ -363,8 +375,9 @@ export async function claimExpiredOnChain(
     const player1TokenAccount = getAssociatedTokenAddressSync(mint, player1Pubkey);
 
     try {
-        console.log(`${tag} Calling claimExpired — player1=${player1WalletKey}, mint=${mint.toBase58()}`);
-        const txSig = await escrowSdk.claimExpired(authorityKeypair, duelIdBuf, player1TokenAccount);
+        console.log(`${tag} Calling claimExpired — player1=${player1WalletKey}, mint=${mint.toBase58()}, isNft=${isNft}`);
+        const sdk = isNft ? escrowSdkV2 : escrowSdk;
+        const txSig = await sdk.claimExpired(authorityKeypair, duelIdBuf, player1TokenAccount);
         console.log(`${tag} claimExpired SUCCESS — tx: ${txSig}`);
         return txSig;
     } catch (err) {
@@ -433,6 +446,7 @@ export async function settleOnChain(
     duelUuid: string,
     winnerWalletKey: string,
     duelTokenMint?: string,
+    isNft = false,
 ): Promise<string> {
     const tag = `[settleOnChain][${duelUuid}]`;
     const winnerPubkey = new PublicKey(winnerWalletKey);
@@ -440,10 +454,10 @@ export async function settleOnChain(
     // Use the per-duel token mint if provided, otherwise fall back to the global default.
     const mint = duelTokenMint ? new PublicKey(duelTokenMint) : tokenMint;
 
-    console.log(`${tag} Starting settlement — winner=${winnerWalletKey}, mint=${mint.toBase58()}`);
+    console.log(`${tag} Starting settlement — winner=${winnerWalletKey}, mint=${mint.toBase58()}, isNft=${isNft}`);
 
     // Run pre-flight diagnostics (logs findings, never throws)
-    await logSettleDiagnostics(duelUuid, winnerPubkey, mint);
+    await logSettleDiagnostics(duelUuid, winnerPubkey, mint, isNft);
 
     // Derive the winner's associated token account for the duel's token mint
     const winnerTokenAccount = getAssociatedTokenAddressSync(mint, winnerPubkey);
@@ -485,7 +499,8 @@ export async function settleOnChain(
 
     try {
         console.log(`${tag} Sending settleEscrow tx...`);
-        const txSig = await escrowSdk.settleEscrow(
+        const sdk = isNft ? escrowSdkV2 : escrowSdk;
+        const txSig = await sdk.settleEscrow(
             authorityKeypair,
             duelIdBuf,
             winnerPubkey,
@@ -511,22 +526,23 @@ export async function settleOnChain(
  * Mark a duel as disputed on-chain.
  * Returns the Solana transaction signature.
  */
-export async function disputeOnChain(duelUuid: string): Promise<string> {
+export async function disputeOnChain(duelUuid: string, isNft = false): Promise<string> {
     const tag = `[disputeOnChain][${duelUuid}]`;
-    console.log(`${tag} Marking duel as disputed on-chain...`);
+    console.log(`${tag} Marking duel as disputed on-chain... isNft=${isNft}`);
     const duelIdBuf = duelIdToBuffer(duelUuid);
     try {
-        const txSig = await escrowSdk.disputeEscrow(authorityKeypair, duelIdBuf);
+        const sdk = isNft ? escrowSdkV2 : escrowSdk;
+        const txSig = await sdk.disputeEscrow(authorityKeypair, duelIdBuf);
         console.log(`${tag} disputeEscrow SUCCESS — tx: ${txSig}`);
         return txSig;
-    } catch (err) {
-        const anchorCode = parseAnchorErrorCode(err);
+    } catch (disputeErr) {
+        const anchorCode = parseAnchorErrorCode(disputeErr);
         if (anchorCode) {
-            console.error(`${tag} disputeEscrow FAILED with Anchor error ${anchorCode.code} (${anchorCode.name}):`, err);
+            console.error(`${tag} disputeEscrow FAILED with Anchor error ${anchorCode.code} (${anchorCode.name}):`, disputeErr);
         } else {
-            console.error(`${tag} disputeEscrow FAILED:`, err);
+            console.error(`${tag} disputeEscrow FAILED:`, disputeErr);
         }
-        throw err;
+        throw disputeErr;
     }
 }
 
@@ -540,6 +556,7 @@ export async function resolveDisputeOnChain(
     duelUuid: string,
     winnerWalletKey: string,
     duelTokenMint?: string,
+    isNft = false,
 ): Promise<string> {
     const tag = `[resolveDisputeOnChain][${duelUuid}]`;
     const winnerPubkey = new PublicKey(winnerWalletKey);
@@ -547,10 +564,10 @@ export async function resolveDisputeOnChain(
     // Use the per-duel token mint if provided, otherwise fall back to the global default.
     const mint = duelTokenMint ? new PublicKey(duelTokenMint) : tokenMint;
 
-    console.log(`${tag} Starting dispute resolution — winner=${winnerWalletKey}, mint=${mint.toBase58()}`);
+    console.log(`${tag} Starting dispute resolution — winner=${winnerWalletKey}, mint=${mint.toBase58()}, isNft=${isNft}`);
 
     // Run pre-flight diagnostics
-    await logSettleDiagnostics(duelUuid, winnerPubkey, mint);
+    await logSettleDiagnostics(duelUuid, winnerPubkey, mint, isNft);
 
     const winnerTokenAccount = getAssociatedTokenAddressSync(mint, winnerPubkey);
     const treasuryTokenAccount = getAssociatedTokenAddressSync(mint, treasuryPubkey);
@@ -586,7 +603,8 @@ export async function resolveDisputeOnChain(
 
     try {
         console.log(`${tag} Sending resolveDispute tx...`);
-        const txSig = await escrowSdk.resolveDispute(
+        const sdk = isNft ? escrowSdkV2 : escrowSdk;
+        const txSig = await sdk.resolveDispute(
             authorityKeypair,
             duelIdBuf,
             winnerPubkey,

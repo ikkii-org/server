@@ -2,7 +2,7 @@
  * Solana configuration singleton.
  *
  * Boots an Anchor provider, loads the escrow IDL, and exposes a ready-to-use
- * IkkiEscrowSDK instance + the authority keypair for server-signed transactions.
+ * IkkiiEscrowSDK instance + the authority keypair for server-signed transactions.
  */
 
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
@@ -10,17 +10,19 @@ import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
 import { env } from "./env";
 
 // Import the generated IDL — copied from escrow/target/idl/ after `anchor build`
-import idl from "./ikki_escrow.json";
+import idl from "./ikkii_escrow.json";
+import idlV2 from "./ikkii_escrow_v2.json";
 
 // Import SDK + types from the published package
-import type { IkkiEscrow } from "ikki-escrow-sdk";
+import type { IkkiiEscrow, IkkiiEscrowV2 } from "ikkii-escrow-sdk";
 import {
-    IkkiEscrowSDK,
+    IkkiiEscrowSDK,
+    IkkiiEscrowV2SDK,
     findPlatformConfigPDA,
     findEscrowPDA,
     findVaultPDA,
     uuidToBytes,
-} from "ikki-escrow-sdk";
+} from "ikkii-escrow-sdk";
 
 // ── Authority Keypair ────────────────────────────────────────────────────────
 
@@ -36,15 +38,21 @@ export const anchorProvider = new AnchorProvider(solanaConnection, wallet, {
     commitment: "confirmed",
 });
 
-// ── Program & SDK ────────────────────────────────────────────────────────────
+// ── V1 Program & SDK ─────────────────────────────────────────────────────────
 
 export const programId = new PublicKey(env.ESCROW_PROGRAM_ID);
-export const escrowProgram = new Program<IkkiEscrow>(idl as any, anchorProvider);
+export const escrowProgram = new Program<IkkiiEscrow>(idl as any, anchorProvider);
 
 // NOTE: The `as any` casts below work around a dual-package Anchor type conflict.
 // The server and escrow each have their own @coral-xyz/anchor in node_modules,
 // causing TS to see them as incompatible types. Bun resolves this correctly at runtime.
-export const escrowSdk = new IkkiEscrowSDK(escrowProgram as any, anchorProvider as any);
+export const escrowSdk = new IkkiiEscrowSDK(escrowProgram as any, anchorProvider as any);
+
+// ── V2 Program & SDK ─────────────────────────────────────────────────────────
+
+export const programIdV2 = new PublicKey(env.ESCROW_V2_PROGRAM_ID);
+export const escrowProgramV2 = new Program<IkkiiEscrowV2>(idlV2 as any, anchorProvider);
+export const escrowSdkV2 = new IkkiiEscrowV2SDK(escrowProgramV2 as any, anchorProvider as any);
 
 // ── Re-exports for convenience ───────────────────────────────────────────────
 
