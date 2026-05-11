@@ -6,6 +6,7 @@ import {
   real,
   index,
   jsonb,
+  boolean,
 } from "drizzle-orm/pg-core";
 import { users } from "./user.schema";
 import { duelStatusEnum } from "./enums";
@@ -60,6 +61,7 @@ export const duels = pgTable(
     ),
     /** Solana transaction signature for settlement/dispute/cancel (audit trail) */
     txSignature: varchar("tx_signature", { length: 128 }),
+    isNft: boolean("is_nft").default(false),
   },
   (table) => {
     return {

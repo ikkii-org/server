@@ -19,6 +19,7 @@ export interface Duel {
     txSignature: string | null;
     expiresAt: Date;
     createdAt: Date;
+    isNft: boolean | null;
 }
 
 export interface DuelSubmitResult {
