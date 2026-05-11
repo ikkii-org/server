@@ -50,6 +50,13 @@
       "when": 1778435002301,
       "tag": "0006_striped_namor",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1778478075004,
+      "tag": "0007_nebulous_chimera",
+      "breakpoints": true
     }
   ]
 }

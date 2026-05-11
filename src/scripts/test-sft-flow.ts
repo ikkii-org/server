@@ -12,7 +12,7 @@ import {
 } from "@solana/spl-token";
 import { BN } from "@coral-xyz/anchor";
 import { escrowSdkV2, authorityKeypair, treasuryPubkey, findEscrowPDA, findVaultPDA, solanaConnection } from "../config/solana";
-import { uuidToBytes } from "ikkii-escrow-sdk";
+import { uuidToBytes } from "../ikkii-escrow-sdk";
 import { randomUUID } from "crypto";
 
 async function fundFromAuthority(pubkey: PublicKey, sol = 0.5) {

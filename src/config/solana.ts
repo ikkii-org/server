@@ -14,7 +14,7 @@ import idl from "./ikkii_escrow.json";
 import idlV2 from "./ikkii_escrow_v2.json";
 
 // Import SDK + types from the published package
-import type { IkkiiEscrow, IkkiiEscrowV2 } from "ikkii-escrow-sdk";
+import type { IkkiiEscrow, IkkiiEscrowV2 } from "../ikkii-escrow-sdk";
 import {
     IkkiiEscrowSDK,
     IkkiiEscrowV2SDK,
@@ -22,7 +22,7 @@ import {
     findEscrowPDA,
     findVaultPDA,
     uuidToBytes,
-} from "ikkii-escrow-sdk";
+} from "../ikkii-escrow-sdk";
 
 // ── Authority Keypair ────────────────────────────────────────────────────────
 
