@@ -2,11 +2,11 @@
 
 FROM oven/bun:1 AS base
 WORKDIR /app
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies
 FROM base AS deps
-COPY package.json bun.lockb* ./
-COPY ikki-escrow-sdk-1.0.0.tgz ./
+COPY package.json bun.lock* ./
 RUN bun install
 
 # Development

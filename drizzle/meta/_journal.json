@@ -43,6 +43,13 @@
       "when": 1772803754392,
       "tag": "0007_small_albert_cleary",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778435002301,
+      "tag": "0006_striped_namor",
+      "breakpoints": true
     }
   ]
 }
