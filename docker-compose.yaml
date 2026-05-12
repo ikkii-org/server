@@ -8,7 +8,7 @@ services:
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/ikkii
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/ikki
       - REDIS_URL=redis://redis:6379
     volumes:
       - .:/app
@@ -28,7 +28,7 @@ services:
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=ikkii
+      - POSTGRES_DB=ikki
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
