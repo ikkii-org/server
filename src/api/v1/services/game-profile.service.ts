@@ -8,12 +8,6 @@ import { db } from "../../../db";
 import { games, gameProfiles, users } from "../../../db/schema";
 import { eq, and } from "drizzle-orm";
 import { getPlayer as getClashRoyalePlayer, type ClashRoyalePlayer } from "./clash-royale.service";
-import {
-  getPlayer as getChessComPlayer,
-  getPlayerStats as getChessComStats,
-  formatRank,
-  buildStatsJson,
-} from "./chess-com.service";
 import { env } from "../../../config/env";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -219,10 +213,6 @@ async function validatePlayerId(
     return await validateClashRoyaleTag(playerId, game, claimedWins, claimedChallengeMaxWins);
   }
 
-  if (gameName.toLowerCase() === "chess.com") {
-    return await validateChessComUsername(playerId, game);
-  }
-
   // Games without API validation — accept any player ID
   return { valid: true };
 }
@@ -284,40 +274,6 @@ async function validateClashRoyaleTag(
   };
 }
 
-/**
- * Validate a Chess.com username by fetching the player profile.
- * Normalizes the username (lowercase, trim).
- */
-async function validateChessComUsername(
-  rawUsername: string,
-  game: typeof games.$inferSelect,
-): Promise<ValidationResult> {
-  const username = rawUsername.trim().toLowerCase();
-
-  if (!game.apiBaseUrl) {
-    return { valid: false, error: "Chess.com API URL not configured" };
-  }
-
-  const player = await getChessComPlayer(game.apiBaseUrl, username);
-
-  if (!player) {
-    return {
-      valid: false,
-      error: `Chess.com username "${username}" not found. Make sure you entered the correct username.`,
-    };
-  }
-
-  // Fetch stats for initial rank and stats
-  const stats = await getChessComStats(game.apiBaseUrl, username);
-
-  return {
-    valid: true,
-    canonicalId: player.username,
-    rank: stats ? formatRank(stats) : undefined,
-    stats: stats ? buildStatsJson(stats) : undefined,
-  };
-}
-
 // ─── Sync Game Profile ────────────────────────────────────────────────────────
 
 /**
@@ -360,10 +316,6 @@ export async function syncGameProfile(
     return await syncClashRoyaleProfile(profile, game);
   }
 
-  if (gameName.toLowerCase() === "chess.com") {
-    return await syncChessComProfile(profile, game);
-  }
-
   return { success: false, profile: null, error: `No sync support for ${gameName}` };
 }
 
@@ -398,45 +350,6 @@ async function syncClashRoyaleProfile(
         expLevel: playerData.expLevel,
         clan: playerData.clan?.name ?? null,
       },
-    })
-    .where(eq(gameProfiles.id, profile.id))
-    .returning();
-
-  return {
-    success: true,
-    profile: {
-      id: updated.id,
-      userId: updated.userId,
-      gameId: updated.gameId,
-      gameName: game.name,
-      playerId: updated.playerId,
-      rank: updated.rank,
-      stats: updated.stats,
-    },
-  };
-}
-
-// ─── Chess.com Sync ───────────────────────────────────────────────────────────
-
-async function syncChessComProfile(
-  profile: typeof gameProfiles.$inferSelect,
-  game: typeof games.$inferSelect
-): Promise<SyncResult> {
-  if (!profile.playerId) {
-    return { success: false, profile: null, error: "Player ID not set" };
-  }
-
-  const stats = await getChessComStats(game.apiBaseUrl!, profile.playerId);
-
-  if (!stats) {
-    return { success: false, profile: null, error: "Failed to fetch Chess.com stats" };
-  }
-
-  const [updated] = await db
-    .update(gameProfiles)
-    .set({
-      rank: formatRank(stats),
-      stats: buildStatsJson(stats),
     })
     .where(eq(gameProfiles.id, profile.id))
     .returning();

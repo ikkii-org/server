@@ -86,9 +86,7 @@ export async function verifyDisputedDuel(duelId: string): Promise<VerificationRe
     }
 
     const apiKey = getApiKeyForGame(game.name);
-    // Chess.com does not require an API key
-    const needsApiKey = game.name.toLowerCase() !== "chess.com";
-    if (!apiKey && needsApiKey) {
+    if (!apiKey) {
         return {
             duelId,
             verified: false,
@@ -136,14 +134,6 @@ export async function verifyDisputedDuel(duelId: string): Promise<VerificationRe
     let result: { verified: boolean; winner: string | null; reason: string };
     try {
         if (game.name.toLowerCase() === "clash royale") {
-            if (!apiKey) {
-                return {
-                    duelId,
-                    verified: false,
-                    winnerUsername: null,
-                    reason: "Clash Royale API key not configured",
-                };
-            }
             result = await verifyMatchBetweenPlayers(
                 game.apiBaseUrl,
                 apiKey,

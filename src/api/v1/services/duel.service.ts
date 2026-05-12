@@ -385,9 +385,7 @@ export async function submitResult(
                 try {
                     const [game] = await db.select().from(games).where(eq(games.id, disputed.gameId));
                     const apiKey = getApiKeyForGame(game?.name);
-                    // Chess.com does not require an API key
-                    const canVerify = game?.apiBaseUrl && (apiKey || game.name.toLowerCase() === "chess.com");
-                    if (canVerify && game.apiBaseUrl) {
+                    if (game?.apiBaseUrl && apiKey) {
                         const verifiedWinner = await verifyWinnerViaGameApi(
                             game.apiBaseUrl,
                             apiKey,
