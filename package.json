@@ -17,6 +17,10 @@
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",
     "@hono/session": "^0.2.0",
+    "@metaplex-foundation/mpl-token-metadata": "^3.4.0",
+    "@metaplex-foundation/umi": "^1.5.1",
+    "@metaplex-foundation/umi-bundle-defaults": "^1.5.1",
+    "@metaplex-foundation/umi-signer-wallet-adapters": "^1.5.1",
     "@node-rs/argon2": "^2.0.2",
     "@sentry/node": "^10.40.0",
     "@solana/spl-token": "^0.4.14",
